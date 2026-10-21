@@ -1,0 +1,140 @@
+{
+  "fecha": "2026-10-21T10:15:21.335Z",
+  "consultas": [
+    {
+      "query": "Catedral de Puno, Puno, Perú",
+      "resultados": [
+        {
+          "display_name": "Catedral Basílica de San Carlos Borromeo, Jirón Deustua, Mañazo, Laykakota, Puno, 21001, Perú",
+          "latitud": -15.840908,
+          "longitud": -70.0289581,
+          "proveedor": "Nominatim / OpenStreetMap"
+        }
+      ]
+    },
+    {
+      "query": "Parque Pino, Puno, Perú",
+      "resultados": [
+        {
+          "display_name": "Parque Pino, Laykakota, Puno, Perú",
+          "latitud": -15.8377634,
+          "longitud": -70.0280229,
+          "proveedor": "Nominatim / OpenStreetMap"
+        }
+      ]
+    }
+  ],
+  "ruta": {
+    "geometry": {
+      "coordinates": [
+        [
+          -70.029049,
+          -15.840691
+        ],
+        [
+          -70.029606,
+          -15.840908
+        ],
+        [
+          -70.029779,
+          -15.84048
+        ],
+        [
+          -70.029918,
+          -15.840097
+        ],
+        [
+          -70.029968,
+          -15.839975
+        ],
+        [
+          -70.030152,
+          -15.83939
+        ],
+        [
+          -70.029695,
+          -15.839292
+        ],
+        [
+          -70.029525,
+          -15.839257
+        ],
+        [
+          -70.028864,
+          -15.839134
+        ],
+        [
+          -70.028646,
+          -15.839095
+        ],
+        [
+          -70.028017,
+          -15.838993
+        ],
+        [
+          -70.02742,
+          -15.838875
+        ],
+        [
+          -70.026777,
+          -15.838747
+        ],
+        [
+          -70.026048,
+          -15.838598
+        ],
+        [
+          -70.026137,
+          -15.837668
+        ],
+        [
+          -70.026217,
+          -15.837203
+        ],
+        [
+          -70.026117,
+          -15.837187
+        ],
+        [
+          -70.026044,
+          -15.837176
+        ],
+        [
+          -70.026458,
+          -15.836193
+        ],
+        [
+          -70.026529,
+          -15.83621
+        ],
+        [
+          -70.027204,
+          -15.836337
+        ],
+        [
+          -70.027971,
+          -15.836505
+        ],
+        [
+          -70.027787,
+          -15.837482
+        ]
+      ],
+      "type": "LineString"
+    },
+    "distancia_km": 1.258,
+    "duracion_estimada_min": 3,
+    "proveedor": "OSRM / OpenStreetMap (servicio público académico)",
+    "fecha_calculo": "2026-10-21T10:15:24.454Z",
+    "origen": {
+      "latitud": -15.840908,
+      "longitud": -70.0289581
+    },
+    "destino": {
+      "latitud": -15.8377634,
+      "longitud": -70.0280229
+    },
+    "medio_transporte": "Vehículo por carretera",
+    "trafico_en_vivo": false
+  }
+}

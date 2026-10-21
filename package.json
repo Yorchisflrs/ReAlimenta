@@ -1,0 +1,26 @@
+{
+  "name": "realimenta",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MVP académico REAlimenta: donaciones y solicitudes persistentes con PostgreSQL",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "db:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-db.ps1",
+    "db:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-db.ps1",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs",
+    "test": "node --test tests/*.test.*",
+    "test:ui": "playwright test"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "leaflet": "^1.9.4",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": { "@playwright/test": "^1.56.0" }
+}
