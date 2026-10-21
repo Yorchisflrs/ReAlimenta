@@ -2,7 +2,7 @@
 
 MVP académico del curso **Taller de Desarrollo de Software**, orientado inicialmente a Puno, Perú. Conecta establecimientos donantes con organizaciones beneficiarias y conserva el frontend HTML, CSS y JavaScript del proyecto original.
 
-La versión incorpora Express, PostgreSQL real, autenticación por roles, donaciones y solicitudes persistentes, mapas Leaflet y rutas por carretera de un proveedor externo. Cuenta con **23 pruebas API/lógica aprobadas y 4 pruebas de navegador aprobadas**, incluido el recorrido publicar → solicitar → aceptar con ruta real. Las demás áreas se identifican como pendientes. La información alimentaria es declarada: REAlimenta no certifica inocuidad ni verifica físicamente la conservación.
+La versión incorpora Express, PostgreSQL real, autenticación por roles, donaciones, solicitudes, seguimiento con cadena de custodia manual, recepción e incidencias. El catálogo incluye fotografías locales y diez donaciones adicionales. Hay mapas Leaflet, rutas reales de OSRM y comparación explícita de escenarios de tráfico. **32 pruebas de servidor/lógica y 8 de navegador aprobadas** comprueban el alcance. La información alimentaria es declarada: el semáforo es logístico y temporal, no certifica inocuidad.
 
 ## Inicio rápido en Windows
 
@@ -15,6 +15,7 @@ npm install
 npm run db:start
 npm run db:migrate
 npm run db:seed
+npm run demo:preparar
 npm start
 ```
 
@@ -105,9 +106,9 @@ npm run test:ui
 
 `npm test` verifica API con **PostgreSQL real en una base temporal aislada**, cálculo logístico y errores controlados de proveedores. Crea `realimenta_test_<pid>_<aleatorio>` y elimina exclusivamente esa base al terminar. PostgreSQL debe estar iniciado y el usuario debe poder crear bases; los datos de `realimenta` se preservan.
 
-Resultado registrado: **23/23 aprobadas, 0 fallos y 0 omitidas**; la duración exacta consta en el reporte. Incluye concurrencia de aceptación, integridad SQL, permisos, CSRF y persistencia tras detener/reiniciar procesos Node. Evidencia generada por el ejecutor: [reporte TAP](docs/evidencias/pruebas-unitarias-integracion.tap). No es una prueba de carga ni acredita p95/disponibilidad. Los fallos externos se prueban con respuestas controladas; la evidencia real de carretera es separada.
+Resultado actual: **32/32 aprobadas, 0 fallos y 0 omitidas**. Incluye aceptación única, integridad, roles/propiedad/CSRF, persistencia, secuencia y versión de custodia, responsables de transferencia, hitos SQL inmutables, incidencias y bloqueo de confirmación por prioridad alta. Evidencia: [reporte TAP actualizado](docs/evidencias/custodia-servidor.tap). La primera ejecución de 23 pruebas se conserva como antecedente. No acredita p95 ni disponibilidad productiva; los fallos externos controlados son pruebas, no sustitutos del proveedor real.
 
-`test:ui` utiliza Playwright con Chrome instalado y requiere la aplicación ya iniciada en otra terminal (`npm start`). Si Chrome está en otra ruta, definir `PLAYWRIGHT_CHROME_PATH`; para otro origen, `UI_BASE_URL`. Resultado: **4/4 aprobadas** en [ui-resumen.json](docs/evidencias/ui-resumen.json): publicación/recarga/solicitud/aceptación, edición/cancelaciones/modal por teclado, vistas de 360 px sin desbordamiento y contenido XSS almacenado mostrado literalmente sin elementos ejecutables. La ruta real devolvió 1,258 km, 3 minutos, 23 puntos y 6/6 teselas cargadas; no hubo errores JavaScript ni de consola. Además, se comprobó manualmente inicio/cierre de sesión en Edge. El rechazo está probado por API, no por una prueba específica de botón en navegador; estas comprobaciones no acreditan toda WCAG ni todos los navegadores/dispositivos.
+`test:ui` utiliza Playwright con Chrome instalado y requiere `npm start` en otra terminal. Definir `PLAYWRIGHT_CHROME_PATH` o `UI_BASE_URL` si cambian. **8/8 aprobadas**: cuatro recorridos originales y cuatro de catálogo fotográfico, mapa y tráfico, seis hitos con incidencia/resolución/recarga y móvil de 360 px sin desbordamiento. Ver [custodia UI](docs/evidencias/custodia-ui.json), [recorridos previos](docs/evidencias/ui-resumen.json) y [reporte conjunto](docs/evidencias/ui-playwright.json). Se esperan las teselas antes de capturar. No se acredita WCAG completa, todos los navegadores ni tráfico en vivo. Al finalizar ejecutar `node scripts/archive-ui-records.mjs`: conserva los registros técnicos sin mostrarlos en el catálogo.
 
 ## Estructura
 
@@ -129,8 +130,8 @@ El servidor publica HTML/carpetas explícitos, no la raíz del proyecto ni `.env
 
 ## Alcance y pendientes
 
-Implementados y probados a nivel API/PG: autenticación, perfiles geográficos, donaciones, solicitudes, transacciones, auditoría, cálculo logístico y errores externos. Verificados en navegador los flujos principales de publicación, recarga, consulta, mapa real, solicitud, aceptación, edición y cancelación; el alcance exacto consta en la evidencia UI.
+Implementados y probados: autenticación, perfiles geográficos, donaciones, solicitudes, transacciones, auditoría, cálculo logístico, seguimiento, hitos de custodia, recepción e incidencias. En navegador se comprobaron publicación, recarga, ruta, solicitud, aceptación, edición, cancelación y cadena completa con resolución. Consultar [seguimiento y custodia](docs/Seguimiento_y_Custodia_REAlimenta.md) para criterios, API, evidencia y guía de exposición. El Word RNF inicial se conserva como línea base anterior; este documento y la ampliación describen el estado actual.
 
-Pendientes: aprobación documental de cuentas, administración avanzada, seguimiento y custodia completos, firmas, recepción, sensores, incidencias, notificaciones, exportación/reportes e impacto validado. Rendimiento bajo carga, disponibilidad, accesibilidad completa, respaldo/restauración y despliegue HTTPS requieren pruebas o infraestructura adicionales.
+Seguimiento y custodia manual, recepción e incidencias ya están implementados. Pendientes: aprobación documental de cuentas, administración avanzada, firmas digitales, GPS y sensores, notificaciones, exportación/reportes e impacto validado. Rendimiento bajo carga, disponibilidad, accesibilidad completa, respaldo/restauración y HTTPS requieren pruebas o infraestructura adicionales. Las fotografías y entidades de muestra no acreditan lotes ni entregas reales.
 
 Documentos: [diagnóstico](docs/Diagnostico_REAlimenta_2.md), [módulos](docs/Modulos_Funcionales_REAlimenta.md), [API](docs/API_REAlimenta.md), [RNF](docs/Requerimientos_No_Funcionales_REAlimenta.md), [demostración de 20 pasos](docs/DEMOSTRACION_REAlimenta.md) y [progreso](docs/PROGRESO_REAlimenta_2.md).

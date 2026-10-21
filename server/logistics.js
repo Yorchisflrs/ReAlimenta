@@ -21,14 +21,22 @@ export function evaluateLogistics(donation, route, input = {}, now = new Date())
     entrega_min: minutes(input.entrega_min, process.env.LOGISTICS_DELIVERY_MIN || 10, 'La entrega'),
     margen_seguridad_min: minutes(input.margen_seguridad_min, process.env.LOGISTICS_SAFETY_MIN || 15, 'El margen logístico'),
     umbral_verde_min: minutes(undefined, process.env.LOGISTICS_GREEN_MARGIN_MIN || 30, 'El umbral verde'),
+    demora_trafico_min: minutes(input.demora_trafico_min, 0, 'La demora del escenario de tráfico'),
   };
+  const moved = ['recogido', 'en_transito', 'entregado', 'confirmado'].includes(input.etapa_custodia);
+  const arrived = ['entregado', 'confirmado'].includes(input.etapa_custodia);
+  if (moved) { config.preparacion_min = 0; config.recojo_min = 0; }
+  if (arrived) { config.entrega_min = 0; config.demora_trafico_min = 0; config.margen_seguridad_min = 0; }
   const base = { ...config, fecha_calculo: now.toISOString(), estado_viabilidad: 'gris', mensaje: 'No es posible evaluar todavía la viabilidad del recorrido.', advertencias: ['Evaluación logística preliminar. No certifica inocuidad ni verifica físicamente la conservación.'], tiempo_total_estimado_min: null, tiempo_restante_min: null, margen_tiempo_min: null };
+  const badCondition = input.condicion_declarada === 'no_conforme' || Number(input.incidencias_criticas || 0) > 0;
+  if(badCondition){base.estado_viabilidad='rojo';base.mensaje='Hay una condición no conforme o una incidencia crítica abierta. Detenga la coordinación y solicite revisión.';}
   const deadline = donation.fecha_limite_aprovechamiento_declarada ? new Date(donation.fecha_limite_aprovechamiento_declarada) : null;
   if (!deadline || !Number.isFinite(deadline.getTime())) {
     base.advertencias.push('Falta la fecha y hora límite de aprovechamiento declarada.');
     return base;
   }
   base.tiempo_restante_min = (deadline - now) / MINUTE;
+  if(base.tiempo_restante_min<=0){base.estado_viabilidad='rojo';base.mensaje='El límite de aprovechamiento declarado ya finalizó. Requiere revisión; no se autoriza consumo.';}
   if (!route || !numeric(route.duracion_estimada_min)) {
     base.advertencias.push('No hay una ruta válida con duración devuelta por el proveedor.');
     return base;
@@ -37,21 +45,25 @@ export function evaluateLogistics(donation, route, input = {}, now = new Date())
     base.advertencias.push('Indique si dispone de medios de transporte para la cadena de frío declarada.');
     return base;
   }
-  const scheduled = input.fecha_propuesta ? new Date(input.fecha_propuesta).getTime() : 0;
+  const scheduled = !moved && input.fecha_propuesta ? new Date(input.fecha_propuesta).getTime() : 0;
   const available = new Date(donation.fecha_disponibilidad).getTime();
-  const wait = Math.max(0, (Math.max(now.getTime(), Number.isFinite(available) ? available : 0, Number.isFinite(scheduled) ? scheduled : 0) - now) / MINUTE);
-  const total = wait + config.preparacion_min + config.recojo_min + Number(route.duracion_estimada_min) + config.entrega_min + config.margen_seguridad_min;
+  const wait = moved ? 0 : Math.max(0, (Math.max(now.getTime(), Number.isFinite(available) ? available : 0, Number.isFinite(scheduled) ? scheduled : 0) - now) / MINUTE);
+  const transport = arrived ? 0 : Number(route.duracion_estimada_min);
+  const total = wait + config.preparacion_min + config.recojo_min + transport + config.demora_trafico_min + config.entrega_min + config.margen_seguridad_min;
   const margin = base.tiempo_restante_min - total;
   const pickupDeadline = new Date(donation.fecha_limite_recojo).getTime();
   const pickupTime = now.getTime() + (wait + config.preparacion_min + config.recojo_min) * MINUTE;
-  Object.assign(base, { espera_programada_min: wait, duracion_transporte_min: Number(route.duracion_estimada_min), tiempo_total_estimado_min: total, margen_tiempo_min: margin });
-  if (margin <= 0 || (Number.isFinite(pickupDeadline) && pickupTime >= pickupDeadline) || (donation.requiere_cadena_frio && input.dispone_cadena_frio === false)) {
+  Object.assign(base, { espera_programada_min: wait, duracion_transporte_min: transport, duracion_base_ruta_min: Number(route.duracion_estimada_min), duracion_con_escenario_min: transport + config.demora_trafico_min, tiempo_total_estimado_min: total, margen_tiempo_min: margin, llegada_estimada: new Date(now.getTime() + total * MINUTE).toISOString(), trafico_en_vivo: false });
+  if (moved && !arrived) base.advertencias.push('Traslado registrado manualmente. Se conserva el recorrido completo como previsión conservadora; no existe localización GPS en vivo.');
+  if (config.demora_trafico_min > 0) base.advertencias.push(`Escenario manual: ${config.demora_trafico_min} minutos adicionales por tráfico. No procede de tráfico en vivo.`);
+  if (margin <= 0 || (!moved && Number.isFinite(pickupDeadline) && pickupTime >= pickupDeadline) || (donation.requiere_cadena_frio && input.dispone_cadena_frio === false) || badCondition) {
     base.estado_viabilidad = 'rojo';
     base.mensaje = 'El traslado no es logísticamente viable bajo las condiciones actuales.';
     if (margin <= 0) base.advertencias.push('La duración total alcanza o supera el tiempo disponible declarado.');
-    if (pickupTime >= pickupDeadline) base.advertencias.push('El recojo estimado queda fuera de la ventana de recojo.');
+    if (!moved && pickupTime >= pickupDeadline) base.advertencias.push('El recojo estimado queda fuera de la ventana de recojo.');
     if (donation.requiere_cadena_frio && input.dispone_cadena_frio === false) base.advertencias.push('No se declaró disponibilidad de medios para mantener la cadena de frío requerida.');
-  } else if (margin < config.umbral_verde_min) {
+    if (badCondition) base.advertencias.push('Existe una condición no conforme o una incidencia crítica abierta: requiere revisión, no autoriza consumo.');
+  } else if (margin < config.umbral_verde_min || input.condicion_declarada === 'requiere_revision' || Number(input.incidencias_abiertas || 0) > 0) {
     base.estado_viabilidad = 'amarillo';
     base.mensaje = 'El traslado presenta un margen de tiempo reducido. Verifique las condiciones antes de coordinar.';
   } else {
@@ -133,6 +145,12 @@ export async function calculateRoute(origin, destination) {
 export function createLogisticsRouter({ pool, requireAuth }) {
   const router = Router();
   const geocodeLimits = new Map();
+  router.get('/destinos',requireAuth,async(req,res)=>{
+    const self=req.user.rol==='organizacion';
+    res.json({data:(await pool.query(`SELECT o.id_organizacion,o.nombre,o.direccion,o.distrito,o.latitud,o.longitud
+      FROM organizacion o JOIN usuario u USING(id_usuario) WHERE o.estado_verificacion='verificado' AND u.estado='activo'
+      ${self?'AND o.id_organizacion=$1':''} ORDER BY o.id_organizacion LIMIT 100`,self?[req.user.perfil?.id_organizacion||-1]:[])).rows});
+  });
   router.get('/geocode', async (req, res) => {
     const key = req.ip;
     let entry = geocodeLimits.get(key);
@@ -147,7 +165,8 @@ export function createLogisticsRouter({ pool, requireAuth }) {
     if (!donation) throw error(404, 'NO_ENCONTRADO', 'La donación no existe.');
     let organization;
     let requestId = null;
-    let input = { ...req.body };
+    // Solo estos parámetros puede elegir el cliente. Las condiciones de custodia proceden de PostgreSQL.
+    let input = Object.fromEntries(['preparacion_min','recojo_min','entrega_min','margen_seguridad_min','demora_trafico_min','dispone_cadena_frio','fecha_propuesta'].filter(key => Object.hasOwn(req.body,key)).map(key => [key,req.body[key]]));
     if (req.user.rol === 'organizacion') {
       organization = req.user.perfil;
       const ownRequest = req.body.id_solicitud
@@ -159,13 +178,18 @@ export function createLogisticsRouter({ pool, requireAuth }) {
       if (ownRequest) { requestId = ownRequest.id_solicitud; input.fecha_propuesta ||= ownRequest.fecha_propuesta; }
     } else if (['donante', 'administrador'].includes(req.user.rol)) {
       if (req.user.rol === 'donante' && String(donation.id_donante) !== String(req.user.perfil?.id_donante)) throw error(403, 'PROHIBIDO', 'Solo puede consultar rutas de sus propias donaciones.');
-      if (!req.body.id_solicitud) throw error(422, 'SOLICITUD_REQUERIDA', 'Seleccione una solicitud para identificar a la organización de destino.');
-      const request = (await pool.query('SELECT s.*, o.latitud, o.longitud FROM solicitud s JOIN organizacion o USING(id_organizacion) WHERE s.id_solicitud=$1 AND s.id_donacion=$2', [id(req.body.id_solicitud), donation.id_donacion])).rows[0];
-      if (!request) throw error(404, 'NO_ENCONTRADO', 'La solicitud no pertenece a esta donación.');
-      organization = request;
-      requestId = request.id_solicitud;
-      input.fecha_propuesta = request.fecha_propuesta;
-      if (typeof input.dispone_cadena_frio !== 'boolean') input.dispone_cadena_frio = request.dispone_cadena_frio;
+      if (req.body.id_solicitud) {
+        const request = (await pool.query('SELECT s.*, o.latitud, o.longitud FROM solicitud s JOIN organizacion o USING(id_organizacion) WHERE s.id_solicitud=$1 AND s.id_donacion=$2', [id(req.body.id_solicitud), donation.id_donacion])).rows[0];
+        if (!request) throw error(404, 'NO_ENCONTRADO', 'La solicitud no pertenece a esta donación.');
+        organization = request;
+        requestId = request.id_solicitud;
+        input.fecha_propuesta = request.fecha_propuesta;
+        if (typeof input.dispone_cadena_frio !== 'boolean') input.dispone_cadena_frio = request.dispone_cadena_frio;
+      } else {
+        if (!req.body.id_organizacion) throw error(422, 'SOLICITUD_REQUERIDA', 'Seleccione una organización de destino o una solicitud para evaluar el recorrido.');
+        organization = (await pool.query(`SELECT o.* FROM organizacion o JOIN usuario u USING(id_usuario) WHERE o.id_organizacion=$1 AND o.estado_verificacion='verificado' AND u.estado='activo'`,[id(req.body.id_organizacion)])).rows[0];
+        if(!organization)throw error(422,'DESTINO_INVALIDO','Seleccione una organización verificada.');
+      }
     } else throw error(403, 'PROHIBIDO', 'El rol no permite evaluar esta ruta.');
     let route = null;
     if (validCoordinates(donation.latitud_recojo, donation.longitud_recojo) && validCoordinates(organization?.latitud, organization?.longitud)) {

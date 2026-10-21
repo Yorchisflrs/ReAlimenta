@@ -1,17 +1,27 @@
 /* Leaflet y rutas reales. No se generan distancias ni polilíneas ficticias. */
 (() => {
   const maps = new WeakMap();
+  const active = new Set();
+  function removeMap(container) {
+    const map=maps.get(container);if(!map)return;
+    map.stop();map.remove();maps.delete(container);active.delete(map);
+  }
+  function dispose(root) {
+    for(const map of [...active]){const container=map.getContainer();if(container===root||root?.contains(container))removeMap(container);}
+  }
   function canvas(container) {
     if (typeof container === 'string') container = document.querySelector(container);
     if (!container) throw new Error('No se encontró el contenedor del mapa.');
-    maps.get(container)?.remove();
+    removeMap(container);
     container.replaceChildren();
     container.style.minHeight = '320px';
     if (!window.L) { container.textContent = 'No se pudo cargar el mapa. Recargue la página para reintentar.'; return null; }
-    const map = L.map(container, { scrollWheelZoom: false }).setView([-15.8402, -70.0219], 13);
+    const map = L.map(container, { scrollWheelZoom: false,zoomControl:false,zoomAnimation:false,fadeAnimation:false,markerZoomAnimation:false }).setView([-15.8402, -70.0219], 13);
+    L.control.zoom({zoomInTitle:'Acercar mapa',zoomOutTitle:'Alejar mapa'}).addTo(map);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
     maps.set(container, map);
-    setTimeout(() => map.invalidateSize(), 120);
+    active.add(map);
+    setTimeout(() => {if(container.isConnected&&maps.get(container)===map)map.invalidateSize();}, 120);
     return map;
   }
   function markerIcon(label, color) {
@@ -38,7 +48,7 @@
     }
     map.on('click', event => setPosition(event.latlng.lat, event.latlng.lng));
     if (latitud !== null && latitud !== undefined && latitud !== '' && longitud !== null && longitud !== undefined && longitud !== '') setPosition(latitud,longitud);
-    return { map, setPosition, getPosition: () => position, destroy: () => map.remove() };
+    return { map, setPosition, getPosition: () => position, destroy: () => removeMap(map.getContainer()) };
   }
   async function search(query) {
     const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, { credentials: 'same-origin' });
@@ -50,16 +60,18 @@
     const map = canvas(container);
     if (!map) return null;
     if (!route?.geometry || !route.origen || !route.destino) {
-      map.remove();
+      removeMap(map.getContainer());
       if (typeof container === 'string') container = document.querySelector(container);
       container.textContent = 'No se pudo calcular una ruta para estas ubicaciones.';
       return null;
     }
-    const polyline = L.geoJSON(route.geometry, { style: { color: '#087f5b', weight: 6, opacity: .9 } }).addTo(map);
-    L.marker([route.origen.latitud, route.origen.longitud], { icon: markerIcon('A','#087f5b') }).addTo(map).bindPopup('A · Establecimiento donante');
-    L.marker([route.destino.latitud, route.destino.longitud], { icon: markerIcon('B','#ef8d3c') }).addTo(map).bindPopup('B · Organización beneficiaria');
-    map.fitBounds(polyline.getBounds(), { padding: [35,35] });
+    const color=({rojo:'#bf604b',amarillo:'#c99b31'})[route.estado_viabilidad]||'#087f5b';
+    const polyline = L.geoJSON(route.geometry, { style: { color, weight: 6, opacity: .9 } }).addTo(map);
+    const popup=(label,point)=>{const node=document.createElement('div');const strong=document.createElement('strong');strong.textContent=`${label} · ${point.nombre||''}`;node.append(strong);if(point.direccion){const p=document.createElement('p');p.textContent=point.direccion;node.append(p);}return node;};
+    L.marker([route.origen.latitud, route.origen.longitud], { icon: markerIcon('A','#087f5b'),title:'A · Establecimiento donante' }).addTo(map).bindPopup(popup('A · Donante',route.origen));
+    L.marker([route.destino.latitud, route.destino.longitud], { icon: markerIcon('B','#ef8d3c'),title:'B · Organización receptora' }).addTo(map).bindPopup(popup('B · Organización',route.destino));
+    map.fitBounds(polyline.getBounds(), { padding: [35,35],animate:false });
     return map;
   }
-  window.REAMaps = { mountPicker, search, showRoute };
+  window.REAMaps = { mountPicker, search, showRoute, dispose };
 })();

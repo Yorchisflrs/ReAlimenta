@@ -82,6 +82,92 @@ test('API y PostgreSQL real responden con fecha del servidor', async () => {
   assert.doesNotMatch(result.response.headers.get('content-security-policy'), /script-src[^;]*unsafe-inline/);
 });
 
+test('Custodia: aceptación crea seguimiento con instantáneas, permisos y secuencia sin saltos',async()=>{
+  const d=await createDonation(),s=await createRequest(d.id_donacion);
+  assert.equal((await call('POST',`/solicitudes/never`,{},accounts.donante)).status,404);
+  assert.equal((await call('POST',`/api/solicitudes/${s.id_solicitud}/aceptar`,{},accounts.donante)).status,200);
+  const row=(await pool.query('SELECT * FROM seguimiento WHERE id_solicitud=$1',[s.id_solicitud])).rows[0];
+  assert.ok(row);assert.equal(row.estado,'preparacion');assert.equal(row.origen.direccion,d.direccion_recojo);
+  assert.equal((await call('GET',`/api/seguimiento/${row.id_seguimiento}`,undefined,accounts.organizacion2)).status,403);
+  assert.equal((await call('GET',`/api/seguimiento/${row.id_seguimiento}`)).status,401);
+  const body={tipo:'recogido',version:row.version,responsable_entrega:'Donante prueba',responsable_recibe:'Conductor prueba',lugar:'Punto de recojo de prueba',condicion_declarada:'sin_novedad',observacion:'Envase cerrado observado para prueba.'};
+  assert.equal((await call('POST',`/api/seguimiento/${row.id_seguimiento}/hitos`,body,accounts.organizacion)).status,409);
+  assert.equal((await call('POST',`/api/seguimiento/${row.id_seguimiento}/hitos`,{...body,tipo:'listo'},accounts.organizacion)).status,403);
+  assert.equal((await call('POST',`/api/seguimiento/${row.id_seguimiento}/hitos`,{...body,tipo:'listo'},accounts.donante)).status,201);
+  const duplicate=await call('POST',`/api/seguimiento/${row.id_seguimiento}/hitos`,{...body,tipo:'observacion'},accounts.donante);
+  assert.equal(duplicate.status,409);assert.equal(duplicate.data.error.code,'CUSTODY_CONFLICT');
+  const loaded=(await call('GET',`/api/seguimiento/${row.id_seguimiento}`,undefined,accounts.admin)).data.data;
+  assert.equal(loaded.hitos.length,2);assert.equal(loaded.estado,'listo');assert.ok(loaded.hitos[1].actor_nombre);
+  await assert.rejects(()=>pool.query('UPDATE hito_custodia SET observacion=$1 WHERE id_hito=$2',['Reescribir no permitido',loaded.hitos[1].id_hito]),/inmutables/);
+});
+
+test('Custodia: transferencias requieren responsables, concurrencia protegida y recepción completa',async()=>{
+  const d=await createDonation(),s=await createRequest(d.id_donacion);
+  await call('POST',`/api/solicitudes/${s.id_solicitud}/aceptar`,{},accounts.donante);
+  const t=(await pool.query('SELECT * FROM seguimiento WHERE id_solicitud=$1',[s.id_solicitud])).rows[0];
+  const path=`/api/seguimiento/${t.id_seguimiento}/hitos`;
+  const body={version:1,lugar:'Ubicación declarada de prueba',condicion_declarada:'sin_novedad',observacion:'Revisión declarada por responsable de prueba.',responsable_entrega:'Donante prueba',responsable_recibe:'Receptor prueba'};
+  const simultaneous=await Promise.all([call('POST',path,{...body,tipo:'listo'},accounts.donante),call('POST',path,{...body,tipo:'listo'},accounts.donante)]);
+  assert.deepEqual(simultaneous.map(r=>r.status).sort(),[201,409]);
+  assert.equal((await call('POST',path,{...body,version:2,tipo:'recogido',responsable_recibe:''},accounts.organizacion)).status,422);
+  assert.equal((await call('POST',path,{...body,version:2,tipo:'recogido'},accounts.organizacion)).status,201);
+  assert.equal((await call('POST',`/api/donaciones/${d.id_donacion}/cancelar`,{motivo:'No debe desaparecer la custodia activa.'},accounts.donante)).status,409);
+  for(const [stage,version] of [['en_transito',3],['entregado',4],['confirmado',5]])assert.equal((await call('POST',path,{...body,version,tipo:stage},accounts.organizacion)).status,201);
+  const row=(await call('GET',`/api/seguimiento/${t.id_seguimiento}`,undefined,accounts.organizacion)).data.data;
+  assert.equal(row.estado,'confirmado');assert.equal(row.hitos.length,6);assert.equal(row.custodio_actual,'Receptor prueba');
+  assert.equal((await call('POST',path,{...body,version:6,tipo:'observacion'},accounts.organizacion)).status,409);
+});
+
+test('Incidencias: acceso por participante, no conformidad automática y resolución solo administrativa',async()=>{
+  const d=await createDonation(),s=await createRequest(d.id_donacion);
+  await call('POST',`/api/solicitudes/${s.id_solicitud}/aceptar`,{},accounts.donante);
+  const t=(await pool.query('SELECT * FROM seguimiento WHERE id_solicitud=$1',[s.id_solicitud])).rows[0];
+  const path=`/api/seguimiento/${t.id_seguimiento}`;
+  const body={tipo:'observacion',version:1,lugar:'Lugar declarado de prueba',condicion_declarada:'no_conforme',observacion:'Se observa daño en el envase durante esta prueba.'};
+  assert.equal((await call('POST',`${path}/hitos`,body,accounts.organizacion)).status,201);
+  const detail=(await call('GET',path,undefined,accounts.donante)).data.data;
+  assert.equal(detail.incidencias_criticas,1);assert.equal(detail.incidencias[0].tipo,'calidad');
+  const incident=detail.incidencias[0];
+  assert.equal((await call('POST',`${path}/incidencias`,{tipo:'demora',severidad:'alta',titulo:'Demora de prueba',descripcion:'Detalle suficientemente largo de demora.'},accounts.organizacion2)).status,403);
+  assert.equal((await call('POST',`/api/incidencias/${incident.id_incidencia}/resolver`,{resolucion:'Resolución de prueba documentada.'},accounts.donante)).status,403);
+  assert.equal((await call('POST',`/api/incidencias/${incident.id_incidencia}/resolver`,{resolucion:'Resolución de prueba documentada, envase retirado.'},accounts.admin)).status,200);
+  assert.equal((await call('POST',`/api/incidencias/${incident.id_incidencia}/resolver`,{resolucion:'No duplicar la resolución ya registrada.'},accounts.admin)).status,409);
+  const final=(await call('GET',path,undefined,accounts.organizacion)).data.data;
+  assert.equal(final.incidencias_criticas,0);assert.equal(final.incidencias[0].estado,'resuelta');assert.ok(final.incidencias[0].resuelto_por);
+  // Resolver no borra el hito no conforme ni lo transforma en una certificación.
+  assert.equal(final.ultimo_hito.condicion_declarada,'no_conforme');
+});
+
+test('Presentación: ocultar registros técnicos conserva detalle y excluye catálogo y seguimiento',async()=>{
+  const d=await createDonation({alimento:'Registro técnico oculto de prueba'});
+  await pool.query('UPDATE donacion SET ocultar_presentacion=true WHERE id_donacion=$1',[d.id_donacion]);
+  const catalog=(await call('GET','/api/donaciones',undefined,accounts.organizacion)).data.data;
+  assert.ok(!catalog.some(row=>row.id_donacion===d.id_donacion));
+  assert.equal((await call('GET',`/api/donaciones/${d.id_donacion}`,undefined,accounts.donante)).status,200);
+  const hidden=(await call('GET','/api/donaciones?incluir_ocultas=1',undefined,accounts.admin)).data.data;
+  assert.ok(hidden.some(row=>row.id_donacion===d.id_donacion));
+});
+
+test('Custodia: una incidencia crítica abierta impide confirmar recepción y conserva el historial',async()=>{
+  const d=await createDonation(),s=await createRequest(d.id_donacion);
+  await call('POST',`/api/solicitudes/${s.id_solicitud}/aceptar`,{},accounts.donante);
+  const t=(await pool.query('SELECT * FROM seguimiento WHERE id_solicitud=$1',[s.id_solicitud])).rows[0];
+  const created=await call('POST',`/api/seguimiento/${t.id_seguimiento}/incidencias`,{tipo:'envase',severidad:'alta',titulo:'Envase pendiente de revisión',descripcion:'Se requiere revisar el envase antes de confirmar la recepción.'},accounts.organizacion);
+  assert.equal(created.status,201);
+  const body={lugar:'Lugar declarado de prueba',condicion_declarada:'sin_novedad',observacion:'Registro manual durante prueba aislada.',responsable_entrega:'Responsable que entrega',responsable_recibe:'Responsable que recibe'};
+  let version=2;
+  for(const stage of ['listo','recogido','en_transito','entregado']){
+    const response=await call('POST',`/api/seguimiento/${t.id_seguimiento}/hitos`,{...body,tipo:stage,version},stage==='listo'?accounts.donante:accounts.organizacion);
+    assert.equal(response.status,201,JSON.stringify(response.data));version++;
+  }
+  const blocked=await call('POST',`/api/seguimiento/${t.id_seguimiento}/hitos`,{...body,tipo:'confirmado',version},accounts.organizacion);
+  assert.equal(blocked.status,409);assert.equal(blocked.data.error.code,'CUSTODY_REVIEW');
+  const resolved=await call('POST',`/api/incidencias/${created.data.data.id_incidencia}/resolver`,{resolucion:'Revisión de prueba registrada y envase sustituido por responsable.'},accounts.admin);
+  assert.equal(resolved.status,200);
+  assert.equal((await call('POST',`/api/seguimiento/${t.id_seguimiento}/hitos`,{...body,tipo:'confirmado',version:version+1},accounts.organizacion)).status,201);
+  assert.equal((await pool.query('SELECT count(*)::int AS count FROM hito_custodia WHERE id_seguimiento=$1',[t.id_seguimiento])).rows[0].count,6);
+});
+
 test('Autenticación: hash scrypt, cookie protegida, rol, error y cierre de sesión', async () => {
   const hashes = (await pool.query('SELECT hash_contrasena FROM usuario')).rows;
   assert.equal(hashes.length, 4);

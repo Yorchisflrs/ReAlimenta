@@ -1,0 +1,64 @@
+{
+  "fecha": "2026-10-21T12:39:12.881Z",
+  "ejecucion": "mvi3mpmz",
+  "proveedores_reales": true,
+  "pruebas": [
+    {
+      "nombre": "Catálogo presentable: fotografías, direcciones y rutas sin publicaciones técnicas",
+      "estado": "passed",
+      "duracion_ms": 3348,
+      "error": null
+    },
+    {
+      "nombre": "Seguimiento real: mapa por carretera, verde y rojo, escenario de tráfico y administración",
+      "estado": "passed",
+      "duracion_ms": 4444,
+      "error": null
+    },
+    {
+      "nombre": "Cadena de custodia completa en navegador: hitos, transferencia, incidencia y resolución",
+      "estado": "passed",
+      "duracion_ms": 14025,
+      "error": null
+    },
+    {
+      "nombre": "Seguimiento móvil a 360 px: catálogo, mapa, incidencias y formularios accesibles",
+      "estado": "passed",
+      "duracion_ms": 5338,
+      "error": null
+    }
+  ],
+  "errores_javascript": [],
+  "registros": [
+    {
+      "id_donacion": 35,
+      "id_solicitud": 16,
+      "id_seguimiento": 12
+    }
+  ],
+  "rutas": [
+    {
+      "distancia": 1.258,
+      "duracion": 3,
+      "puntos": 23,
+      "demora": 45,
+      "trafico_en_vivo": false
+    }
+  ],
+  "catalogo": {
+    "donaciones": 13,
+    "imagenes": 13,
+    "prueba_ui_visible": false
+  },
+  "custodia": {
+    "completa": true,
+    "hitos": 6,
+    "incidencia_resuelta": true,
+    "persistencia_recarga": true
+  },
+  "movil": {
+    "viewport": 360,
+    "document": 360,
+    "body": 360
+  }
+}

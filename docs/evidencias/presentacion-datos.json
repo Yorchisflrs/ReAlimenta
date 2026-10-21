@@ -1,0 +1,230 @@
+{
+  "fecha": "2026-10-21T12:08:54.670Z",
+  "datos": "Ficticios para presentación académica, sin ofertas ni eventos físicos reales.",
+  "puntos": {
+    "centro": {
+      "direccion": "Jr. Deustua · entorno de la Catedral de Puno (punto de demostración)",
+      "distrito": "Puno",
+      "latitud": -15.840908,
+      "longitud": -70.0289581
+    },
+    "universidad": {
+      "direccion": "Av. Sesquicentenario · sector universitario UNA, Puno (punto de demostración)",
+      "distrito": "Puno",
+      "latitud": -15.8268629,
+      "longitud": -70.0141356
+    },
+    "mercado": {
+      "direccion": "Jr. Tacna · entorno del Mercado Central, Puno (punto de demostración)",
+      "distrito": "Puno",
+      "latitud": -15.8374864,
+      "longitud": -70.0265406
+    },
+    "pino": {
+      "direccion": "Jr. Lima · Parque Pino, Puno (punto de demostración)",
+      "distrito": "Puno",
+      "latitud": -15.8377634,
+      "longitud": -70.0280229
+    },
+    "juliaca": {
+      "direccion": "Entorno de Plaza de Armas, Juliaca (punto de demostración)",
+      "distrito": "Juliaca",
+      "latitud": -15.4932157,
+      "longitud": -70.1355925
+    }
+  },
+  "donaciones": [
+    {
+      "id": 12,
+      "alimento": "Hogazas artesanales del día"
+    },
+    {
+      "id": 13,
+      "alimento": "Tomates seleccionados para salsa"
+    },
+    {
+      "id": 14,
+      "alimento": "Arroz envasado para despensa"
+    },
+    {
+      "id": 15,
+      "alimento": "Crema de verduras · recojo coordinado"
+    },
+    {
+      "id": 16,
+      "alimento": "Galletas artesanales de avena"
+    },
+    {
+      "id": 17,
+      "alimento": "Canastas de fruta de temporada"
+    },
+    {
+      "id": 18,
+      "alimento": "Hortalizas de la huerta"
+    },
+    {
+      "id": 19,
+      "alimento": "Leche en envase cerrado"
+    },
+    {
+      "id": 20,
+      "alimento": "Ensalada de verduras · coordinación local"
+    },
+    {
+      "id": 21,
+      "alimento": "Pan de molde · ruta Juliaca–Puno"
+    }
+  ],
+  "seguimientos": [
+    {
+      "id": 3,
+      "alimento": "Pan integral · entrega al Comedor Esperanza",
+      "etapa": "en_transito"
+    },
+    {
+      "id": 4,
+      "alimento": "Salsa de tomate · coordinación universitaria",
+      "etapa": "preparacion"
+    },
+    {
+      "id": 5,
+      "alimento": "Crema de verduras · evaluación Puno–Juliaca",
+      "etapa": "preparacion"
+    },
+    {
+      "id": 6,
+      "alimento": "Yogur envasado · conservación en revisión",
+      "etapa": "listo"
+    },
+    {
+      "id": 7,
+      "alimento": "Canastas de fruta · recepción confirmada",
+      "etapa": "confirmado"
+    }
+  ],
+  "rutas": [
+    {
+      "id_donacion": 22,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23,
+      "semaforo": "verde"
+    },
+    {
+      "id_donacion": 23,
+      "distancia_km": 2.2651999999999997,
+      "duracion_min": 3.86,
+      "puntos": 56,
+      "semaforo": "amarillo"
+    },
+    {
+      "id_donacion": 24,
+      "distancia_km": 42.3119,
+      "duracion_min": 44.61333333333334,
+      "puntos": 460,
+      "semaforo": "rojo"
+    },
+    {
+      "id_donacion": 25,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23,
+      "semaforo": "rojo"
+    },
+    {
+      "id_donacion": 26,
+      "distancia_km": 0.6437,
+      "duracion_min": 2.013333333333333,
+      "puntos": 12,
+      "semaforo": "verde"
+    },
+    {
+      "id_donacion": 3,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23
+    },
+    {
+      "id_donacion": 12,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23
+    },
+    {
+      "id_donacion": 13,
+      "distancia_km": 0.6437,
+      "duracion_min": 2.013333333333333,
+      "puntos": 12
+    },
+    {
+      "id_donacion": 14,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23
+    },
+    {
+      "id_donacion": 15,
+      "distancia_km": 2.2651999999999997,
+      "duracion_min": 3.86,
+      "puntos": 56
+    },
+    {
+      "id_donacion": 16,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23
+    },
+    {
+      "id_donacion": 17,
+      "distancia_km": 0.6437,
+      "duracion_min": 2.013333333333333,
+      "puntos": 12
+    },
+    {
+      "id_donacion": 18,
+      "distancia_km": 0.6437,
+      "duracion_min": 2.013333333333333,
+      "puntos": 12
+    },
+    {
+      "id_donacion": 19,
+      "distancia_km": 42.889199999999995,
+      "duracion_min": 54.416666666666664,
+      "puntos": 559
+    },
+    {
+      "id_donacion": 20,
+      "distancia_km": 2.2651999999999997,
+      "duracion_min": 3.86,
+      "puntos": 56
+    },
+    {
+      "id_donacion": 21,
+      "distancia_km": 42.889199999999995,
+      "duracion_min": 54.416666666666664,
+      "puntos": 559
+    },
+    {
+      "id_donacion": 1,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23
+    },
+    {
+      "id_donacion": 2,
+      "distancia_km": 1.258,
+      "duracion_min": 3,
+      "puntos": 23
+    }
+  ],
+  "archivadas": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ]
+}

@@ -67,8 +67,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('[data-account-status]').textContent = `${state.user.es_demostracion ? 'Cuenta de prueba · ' : ''}${role === 'administrador' ? 'Administración de la plataforma' : `${label(profile.estado_verificacion || 'pendiente')} · ${profile.distrito || 'Ubicación pendiente'}`}`;
   }
   function setContent(html, title) {
+    window.REAMaps?.dispose(main);
     picker?.destroy?.(); picker = null;
     main.innerHTML = html;
+    window.REAPresentation?.enhance(main,state);
     $('[data-breadcrumb]').textContent = title;
     document.title = `${title} | REAlimenta`;
     $$('.sidebar-nav [data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === state.current || (state.current === 'detalle' && ['mis-donaciones', 'donaciones', 'disponibles'].includes(button.dataset.view))));
@@ -89,6 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     else if (view === 'detalle') await renderDetail(options.id || state.selected?.id_donacion, options.request || null);
     else if (view === 'perfil' || view === 'establecimiento' || view === 'organizacion') await renderProfile();
     else if (view === 'auditoria') await renderAudit();
+    else if (view === 'seguimiento' || view === 'incidencias') await REACustody.render(view);
     else renderPending(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -111,7 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="mvp-metrics">${metrics}</div>
       <div class="mvp-feature-banner"><div><span class="small-kicker">DE LA DISPONIBILIDAD A LA OPORTUNIDAD</span><h2>Una buena conexión<br>empieza con una ruta clara.</h2><p>Consulta ubicaciones, calcula una ruta por carretera y evalúa el tiempo antes de coordinar.</p>${action('Explorar donaciones <i class="fa-solid fa-arrow-right"></i>', 'navigate', `data-target="${donor ? 'mis-donaciones' : role === 'administrador' ? 'donaciones' : 'disponibles'}"`, 'btn-light')}</div><div class="route-illustration" aria-hidden="true"><span class="illustration-pin origin"><i class="fa-solid fa-store"></i></span><span class="illustration-road"></span><span class="illustration-pin destination"><i class="fa-solid fa-people-roof"></i></span><span class="illustration-label">Una red. Más posibilidades.</span></div></div>
       <div class="mvp-dashboard-grid"><article class="mvp-panel"><div class="panel-heading"><div><span class="section-kicker">MOVIMIENTO EN TU RED</span><h2>${donor ? 'Solicitudes recientes' : 'Tus últimas solicitudes'}</h2></div>${action('Ver todas <i class="fa-solid fa-arrow-right"></i>', 'navigate', 'data-target="solicitudes"', 'btn-text')}</div>${state.requests.length ? `<div class="compact-requests">${state.requests.slice(0, 4).map(r => `<button class="compact-request" type="button" data-action="request-detail" data-id="${r.id_solicitud}"><span class="compact-icon"><i class="fa-solid fa-box-open"></i></span><span><strong>${escape(r.donacion?.alimento || 'Donación')}</strong><small>${escape(r.organizacion?.nombre || r.donante?.nombre_establecimiento || `Solicitud #${r.id_solicitud}`)}</small></span>${badge(r.estado)}<i class="fa-solid fa-chevron-right"></i></button>`).join('')}</div>` : empty('Las buenas conexiones están por llegar', donor ? 'Tus solicitudes aparecerán aquí cuando una organización se interese en tu donación.' : 'Busca una donación y envía tu primera solicitud.')}</article><aside class="mvp-panel"><div class="panel-heading"><div><span class="section-kicker">PARA TENER EN CUENTA</span><h2>Planifica con información</h2></div><span class="round-icon"><i class="fa-regular fa-lightbulb"></i></span></div><div class="insight-item"><span class="insight-icon amber"><i class="fa-regular fa-clock"></i></span><div><strong>${alertDonations.length ? `${alertDonations.length} donación(es) con recojo próximo` : 'Cada ventana de recojo importa'}</strong><p>${alertDonations.length ? 'Hay publicaciones con menos de cuatro horas hasta su límite de recojo.' : 'Revisa disponibilidad, conservación y horarios antes de enviar o aceptar una solicitud.'}</p></div></div><div class="insight-item"><span class="insight-icon"><i class="fa-solid fa-route"></i></span><div><strong>Calcula antes de coordinar</strong><p>La evaluación logística compara la duración real de ruta con el límite de aprovechamiento declarado.</p></div></div><div class="responsibility-note"><i class="fa-solid fa-circle-info"></i><p>La información alimentaria es declarada. REAlimenta no certifica inocuidad ni monitorea temperatura.</p></div></aside></div>
-      ${role !== 'administrador' ? `<div class="section-row"><div><span class="section-kicker">ALIMENTOS CON UNA NUEVA OPORTUNIDAD</span><h2>${donor ? 'Tus publicaciones disponibles' : 'Descubre lo que puedes aprovechar'}</h2></div></div><div class="mvp-donation-grid">${cards || empty('Sin publicaciones disponibles', donor ? 'Publica un alimento para comenzar.' : 'Vuelve pronto para consultar nuevas publicaciones.')}</div>` : `<div class="mvp-message neutral"><i class="fa-solid fa-database"></i> Los conteos provienen de los registros de PostgreSQL. Incidencias, verificaciones y reportes avanzados están pendientes de implementación.</div>`}`, 'Vista general');
+      ${role !== 'administrador' ? `<div class="section-row"><div><span class="section-kicker">ALIMENTOS CON UNA NUEVA OPORTUNIDAD</span><h2>${donor ? 'Tus publicaciones disponibles' : 'Descubre lo que puedes aprovechar'}</h2></div></div><div class="mvp-donation-grid">${cards || empty('Sin publicaciones disponibles', donor ? 'Publica un alimento para comenzar.' : 'Vuelve pronto para consultar nuevas publicaciones.')}</div>` : `<div class="mvp-message neutral"><i class="fa-solid fa-database"></i> Los conteos provienen de los registros de PostgreSQL. Seguimiento, custodia e incidencias operan con registros persistentes. Verificaciones documentales y reportes avanzados continúan pendientes.</div>`}`, 'Vista general');
   }
   function remaining(value) {
     if (!value) return 'Límite no declarado';
@@ -142,6 +145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const visible = filteredDonations();
     $('[data-results-count]').textContent = `${visible.length} ${visible.length === 1 ? 'donación encontrada' : 'donaciones encontradas'}`;
     $('[data-donation-results]').innerHTML = visible.map(donationCard).join('') || empty('Por ahora, no hay coincidencias', 'Prueba otra búsqueda o cambia los filtros.');
+    window.REAPresentation?.decorate(main,state);
   }
   async function renderDetail(id, request = null) {
     if (!id) { await navigate(role === 'donante' ? 'mis-donaciones' : 'disponibles'); return; }
@@ -172,15 +176,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     return `<div class="feasibility-panel tone-${tone}"><div class="feasibility-heading"><span class="traffic-light"><i class="${tone === 'verde' ? 'active' : ''}"></i><i class="${tone === 'amarillo' ? 'active' : ''}"></i><i class="${tone === 'rojo' ? 'active' : ''}"></i></span><div><small>SEMÁFORO DE VIABILIDAD LOGÍSTICA Y TEMPORAL</small><h3>${e ? viabilityLabel(e.estado_viabilidad) : 'Información insuficiente'}</h3><p>${escape(e?.mensaje || 'No es posible evaluar todavía la viabilidad del recorrido. Calcula una ruta con las ubicaciones y los tiempos de planificación.')}</p></div></div>${e ? `<div class="evaluation-values"><div><small>Distancia estimada</small><strong>${result.ruta?.distancia_km != null ? number(result.ruta.distancia_km) + ' km' : 'No disponible'}</strong></div><div><small>Duración por carretera</small><strong>${result.ruta?.duracion_estimada_min != null ? number(result.ruta.duracion_estimada_min) + ' min' : 'No disponible'}</strong></div><div><small>Tiempo declarado disponible</small><strong>${e.tiempo_restante_min != null ? number(e.tiempo_restante_min) + ' min' : 'No declarado'}</strong></div><div><small>Tiempo total estimado</small><strong>${e.tiempo_total_estimado_min != null ? number(e.tiempo_total_estimado_min) + ' min' : 'No disponible'}</strong></div><div><small>Margen restante</small><strong>${e.margen_tiempo_min != null ? number(e.margen_tiempo_min) + ' min' : 'No disponible'}</strong></div></div><div class="time-progress" role="progressbar" aria-label="Proporción del tiempo disponible requerida para el traslado" aria-valuenow="${Math.round(percent)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${percent}%"></span></div>${e.advertencias?.length ? `<ul class="evaluation-warnings">${e.advertencias.map(w => `<li>${escape(w)}</li>`).join('')}</ul>` : ''}` : ''}<p class="evaluation-footnote"><i class="fa-solid fa-circle-info"></i> Evaluación logística preliminar. No constituye una certificación sanitaria.</p></div>`;
   }
   function displayRoute(result) {
-    $('#route-evaluation').innerHTML = renderEvaluation(result);
+    $('#route-evaluation').innerHTML = REAPresentation.comparison(result) + renderEvaluation(result);
     if (result.ruta?.geometry) REAMaps.showRoute($('#delivery-map'), result.ruta);
     $('[data-route-provider]').textContent = result.ruta ? `${result.ruta.proveedor || result.ruta.proveedor_ruta || 'Proveedor de rutas'} · Calculada: ${date(result.ruta.fecha_calculo)} · Duración estimada sin tráfico en vivo.` : 'Sin ruta disponible para estas ubicaciones.';
   }
   async function evaluateRoute(form) {
-    if (role !== 'organizacion' && !state.selectedRequest) throw new Error('Selecciona primero una organización solicitante para evaluar su recorrido.');
-    const body = Object.fromEntries(['preparacion_min', 'recojo_min', 'entrega_min', 'margen_seguridad_min'].map(key => [key, Number(form.elements.namedItem(key).value)]));
+    if (role !== 'organizacion' && !state.selectedRequest && !form.id_organizacion?.value) throw new Error('Selecciona una organización de destino para evaluar su recorrido.');
+    const body = Object.fromEntries(['preparacion_min', 'recojo_min', 'entrega_min', 'margen_seguridad_min','demora_trafico_min'].map(key => [key, Number(form.elements.namedItem(key)?.value||0)]));
     body.dispone_cadena_frio = form.dispone_cadena_frio.checked;
     if (state.selectedRequest) { body.id_solicitud = state.selectedRequest.id_solicitud; body.fecha_propuesta = state.selectedRequest.fecha_propuesta; }
+    else if (role !== 'organizacion') body.id_organizacion=Number(form.id_organizacion.value);
     const result = await REA.request(`/api/donaciones/${state.selected.id_donacion}/evaluacion`, { method: 'POST', body });
     state.evaluations.set(`${state.selected.id_donacion}:${state.selectedRequest?.id_solicitud || 'org'}`, result.data);
     if (role === 'organizacion') state.evaluations.set(String(state.selected.id_donacion), result.data);
@@ -341,6 +346,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) { showError(error, errors); if (form.id === 'route-form') { $('#route-evaluation').innerHTML = renderEvaluation(null); $('#delivery-map').innerHTML = '<div class="map-placeholder"><i class="fa-solid fa-route"></i><strong>No se pudo calcular una ruta para estas ubicaciones</strong><span>Comprueba los datos y vuelve a intentarlo.</span></div>'; $('[data-route-provider]').textContent = 'Sin cálculo de ruta disponible. No se muestran distancia ni duración ficticias.'; } }
     finally { submit.disabled = false; submit.innerHTML = original; }
   });
+  REAPresentation.configure({displayRoute,renderEvaluation});
+  REACustody.configure({main,role,heading,setContent,renderEvaluation,date,number,escape,openDialog,closeDialog,toast,user:()=>state.user,profile:()=>state.profile});
   try {
     state.user = await REA.me();
     if (state.user.rol !== role) { location.replace(REA.destination(state.user.rol)); return; }

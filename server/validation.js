@@ -54,7 +54,13 @@ export function profileInput(body, role) {
 }
 
 export function donationInput(body) {
+  const image = optionalText(body.imagen_clave, 'imagen del alimento', 40);
+  const foodProfile = body.perfil_alimento || 'general';
+  if (!['','pan','fruta','verduras','yogur','arroz','sopa','salsa','galletas','leche','ensalada'].includes(image)) fail(422, 'IMAGE_INVALID', 'Seleccione una de las fotografías disponibles.');
+  if (!['general','panaderia','frutas','hortalizas','preparado','refrigerado','seco'].includes(foodProfile)) fail(422, 'FOOD_PROFILE_INVALID', 'Seleccione un tipo de alimento válido.');
   const value = {
+    imagen_clave: image,
+    perfil_alimento: foodProfile,
     alimento: text(body.alimento, 'alimento', 2, 180),
     categoria: text(body.categoria, 'categoría', 2, 100),
     cantidad: number(body.cantidad, 'cantidad', 0.001, 999999999),

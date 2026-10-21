@@ -7,6 +7,7 @@ import { authRouter, loadSession, checkOrigin, csrf, requireAuth, requireRole } 
 import { businessRouter, getStats } from './business.js';
 import { errorHandler } from './errors.js';
 import { createLogisticsRouter } from './logistics.js';
+import { custodyRouter } from './custody.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export { pool };
@@ -44,6 +45,7 @@ export function createApp() {
   app.use('/api', loadSession, csrf);
   app.use('/api/auth', authRouter);
   app.use('/api', createLogisticsRouter({ pool, requireAuth, requireRole, csrf }));
+  app.use('/api', custodyRouter);
   app.use('/api', businessRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No existe este recurso de la API.' } }));
 

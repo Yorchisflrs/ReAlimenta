@@ -42,3 +42,21 @@ test('Coordenadas inválidas y tiempos negativos se rechazan', () => {
   assert.equal(validCoordinates(100, 200), false);
   assert.throws(() => evaluateLogistics(donation, route, { preparacion_min: -1 }, now), /entre 0 y 1440/);
 });
+test('Un plazo declarado de una hora nunca permite un traslado estimado de tres horas', () => {
+  const result=evaluateLogistics({...donation,fecha_limite_aprovechamiento_declarada:'2026-10-21T16:00:00Z'},{duracion_estimada_min:180},{preparacion_min:0,recojo_min:0,entrega_min:0,margen_seguridad_min:0},now);
+  assert.equal(result.estado_viabilidad,'rojo');assert.equal(result.margen_tiempo_min,-120);
+});
+test('El escenario de tráfico suma demora manual sin presentarse como tráfico vivo',()=>{
+  const result=evaluateLogistics(donation,route,{demora_trafico_min:45},now);
+  assert.equal(result.tiempo_total_estimado_min,115);assert.equal(result.duracion_con_escenario_min,65);
+  assert.equal(result.trafico_en_vivo,false);assert.match(result.advertencias.join(' '),/Escenario manual/);
+});
+test('Tras el recojo no se vuelve a contar preparación ni se rechaza una ventana de recojo ya cumplida',()=>{
+  const result=evaluateLogistics({...donation,fecha_limite_recojo:'2026-10-21T14:00:00Z'},route,{etapa_custodia:'en_transito'},now);
+  assert.equal(result.preparacion_min,0);assert.equal(result.recojo_min,0);assert.equal(result.tiempo_total_estimado_min,45);assert.equal(result.estado_viabilidad,'verde');
+});
+test('Una incidencia crítica o condición no conforme prevalece sobre margen suficiente',()=>{
+  assert.equal(evaluateLogistics(donation,route,{incidencias_criticas:1},now).estado_viabilidad,'rojo');
+  assert.equal(evaluateLogistics(donation,route,{condicion_declarada:'no_conforme'},now).estado_viabilidad,'rojo');
+  assert.equal(evaluateLogistics(donation,route,{condicion_declarada:'requiere_revision'},now).estado_viabilidad,'amarillo');
+});

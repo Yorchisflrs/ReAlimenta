@@ -3,6 +3,28 @@ import { pool, transaction, audit } from './db.js';
 import { requireAuth, requireRole, requireVerified, userFromRow } from './auth.js';
 import { fail } from './errors.js';
 import { id, text, optionalText, date, donationInput, profileInput, bool } from './validation.js';
+import { createTracking } from './custody.js';
+import { evaluateLogistics } from './logistics.js';
+
+async function attachPlans(rows, user) {
+  if (!rows.length) return rows;
+  const params = [rows.map(d => d.id_donacion)];
+  const org = user.rol === 'organizacion' ? ' AND e.id_organizacion=$2' : '';
+  if (org) params.push(user.perfil?.id_organizacion || -1);
+  const saved = (await pool.query(`SELECT DISTINCT ON (e.id_donacion) e.*,o.nombre AS destino_nombre,o.direccion AS destino_direccion
+    FROM evaluacion_ruta e LEFT JOIN organizacion o USING(id_organizacion)
+    WHERE e.id_donacion=ANY($1::int[]) ${org} AND e.geometria IS NOT NULL
+    ORDER BY e.id_donacion,e.fecha_calculo DESC,e.id_evaluacion DESC`, params)).rows;
+  for (const d of rows) {
+    const e = saved.find(x => x.id_donacion === d.id_donacion);
+    if (!e?.detalle?.ruta) continue;
+    const input = { preparacion_min:10,recojo_min:10,entrega_min:5,margen_seguridad_min:15,demora_trafico_min:0 };
+    if(d.cadena_custodia){const t=d.cadena_custodia;Object.assign(input,{etapa_custodia:t.estado,condicion_declarada:t.condicion_declarada,incidencias_criticas:t.incidencias_criticas,incidencias_abiertas:t.incidencias_abiertas,fecha_propuesta:t.fecha_propuesta,dispone_cadena_frio:t.dispone_cadena_frio});}
+    d.plan_ruta = { ruta:e.detalle.ruta,evaluacion:evaluateLogistics(d,e.detalle.ruta,input),id_organizacion:e.id_organizacion,
+      destino:{nombre:e.destino_nombre,direccion:e.destino_direccion},nota:'Plan preliminar recalculado con el reloj del servidor; confirme conservación y condiciones antes de coordinar.' };
+  }
+  return rows;
+}
 
 export async function expireDonations() {
   return transaction(async client => {
@@ -23,7 +45,12 @@ const donationSelect = `SELECT d.*,dt.nombre_establecimiento AS donante_nombre,d
   dt.estado_verificacion AS donante_estado_verificacion,u.estado AS donante_estado,
   jsonb_build_object('id_donante',dt.id_donante,'nombre_establecimiento',dt.nombre_establecimiento,'direccion',dt.direccion,
   'distrito',dt.distrito,'latitud',dt.latitud,'longitud',dt.longitud,'es_demostracion',u.es_demostracion) AS donante,
-  (SELECT count(*)::int FROM solicitud s WHERE s.id_donacion=d.id_donacion) AS solicitudes_count
+  (SELECT count(*)::int FROM solicitud s WHERE s.id_donacion=d.id_donacion) AS solicitudes_count,
+  (SELECT jsonb_build_object('id_seguimiento',t.id_seguimiento,'estado',t.estado,'fecha_propuesta',s.fecha_propuesta,'dispone_cadena_frio',s.dispone_cadena_frio,
+    'condicion_declarada',(SELECT h.condicion_declarada FROM hito_custodia h WHERE h.id_seguimiento=t.id_seguimiento ORDER BY h.fecha_evento DESC,h.id_hito DESC LIMIT 1),
+    'incidencias_criticas',(SELECT count(*)::int FROM incidencia i WHERE i.id_seguimiento=t.id_seguimiento AND i.estado='abierta' AND i.severidad='alta'),
+    'incidencias_abiertas',(SELECT count(*)::int FROM incidencia i WHERE i.id_seguimiento=t.id_seguimiento AND i.estado='abierta'))
+    FROM seguimiento t JOIN solicitud s USING(id_solicitud) WHERE s.id_donacion=d.id_donacion LIMIT 1) AS cadena_custodia
   FROM donacion d JOIN donante dt USING(id_donante) JOIN usuario u ON u.id_usuario=dt.id_usuario`;
 const requestSelect = `SELECT s.*,d.alimento,d.cantidad,d.unidad,d.estado AS donacion_estado,
   dt.nombre_establecimiento AS donante_nombre,o.nombre AS organizacion_nombre,
@@ -52,6 +79,7 @@ businessRouter.use(requireAuth);
 businessRouter.get('/donaciones', async (req, res) => {
   await expireDonations();
   const conditions = [], params = [];
+  if (!(req.user.rol === 'administrador' && req.query.incluir_ocultas === '1')) conditions.push('NOT d.ocultar_presentacion');
   const add = (sql, value) => { params.push(value); conditions.push(sql.replace('?', `$${params.length}`)); };
   if (req.user.rol === 'donante') add('d.id_donante=?', req.user.perfil?.id_donante || -1);
   else if (req.user.rol === 'organizacion') {
@@ -62,7 +90,7 @@ businessRouter.get('/donaciones', async (req, res) => {
   if (req.query.distrito) add('d.distrito ILIKE ?', String(req.query.distrito));
   if (req.query.estado) add('d.estado=?', String(req.query.estado));
   const result = await pool.query(`${donationSelect} ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY d.fecha_creacion DESC,d.id_donacion DESC LIMIT 200`, params);
-  res.json({ data: result.rows });
+  res.json({ data: await attachPlans(result.rows,req.user) });
 });
 
 businessRouter.get('/donaciones/:id', async (req, res) => {
@@ -76,6 +104,7 @@ businessRouter.get('/donaciones/:id', async (req, res) => {
   }
   if (req.user.rol === 'donante' || req.user.rol === 'administrador') row.solicitudes = (await pool.query(`${requestSelect} WHERE s.id_donacion=$1 ORDER BY s.fecha_creacion DESC`, [row.id_donacion])).rows;
   else row.solicitudes = (await pool.query(`${requestSelect} WHERE s.id_donacion=$1 AND s.id_organizacion=$2 ORDER BY s.fecha_creacion DESC`, [row.id_donacion, req.user.perfil?.id_organizacion || -1])).rows;
+  await attachPlans([row],req.user);
   res.json({ data: row });
 });
 
@@ -116,6 +145,8 @@ businessRouter.post('/donaciones/:id/cancelar', requireRole('donante'), async (r
     const existing = await lockedDonation(client, id(req.params.id));
     donationOwner(req, existing);
     if (!['disponible', 'en_proceso'].includes(existing.estado)) fail(409, 'INVALID_STATE', 'La donación ya está cancelada o vencida.');
+    const tracking = (await client.query('SELECT t.estado FROM seguimiento t JOIN solicitud s USING(id_solicitud) WHERE s.id_donacion=$1 FOR UPDATE OF t', [existing.id_donacion])).rows[0];
+    if (tracking && !['preparacion','listo'].includes(tracking.estado)) fail(409, 'CUSTODY_STARTED', 'El recojo ya fue registrado. Gestione el problema mediante una incidencia para conservar la cadena de custodia.');
     const canceled = (await client.query("UPDATE donacion SET estado='cancelada',motivo_cancelacion=$2,fecha_actualizacion=now() WHERE id_donacion=$1 RETURNING *", [existing.id_donacion, motivo])).rows[0];
     const affected = (await client.query(`UPDATE solicitud SET estado='cancelada',motivo_decision=$2,fecha_actualizacion=now()
       WHERE id_donacion=$1 AND estado IN ('pendiente','aceptada') RETURNING id_solicitud`, [existing.id_donacion, `Donante canceló la donación: ${motivo}`])).rows;
@@ -129,6 +160,7 @@ businessRouter.post('/donaciones/:id/cancelar', requireRole('donante'), async (r
 businessRouter.get('/solicitudes', async (req, res) => {
   await expireDonations();
   const params = [], conditions = [];
+  if (!(req.user.rol === 'administrador' && req.query.incluir_ocultas === '1')) conditions.push('NOT d.ocultar_presentacion');
   if (req.user.rol === 'donante') { params.push(req.user.perfil?.id_donante || -1); conditions.push('d.id_donante=$1'); }
   else if (req.user.rol === 'organizacion') { params.push(req.user.perfil?.id_organizacion || -1); conditions.push('s.id_organizacion=$1'); }
   if (req.query.id_donacion) { params.push(id(req.query.id_donacion)); conditions.push(`s.id_donacion=$${params.length}`); }
@@ -188,6 +220,7 @@ for (const action of ['aceptar', 'rechazar', 'cancelar']) {
         for (const other of rejected) await audit(client, req.user.id_usuario, 'solicitud', other.id_solicitud, 'rechazar_no_seleccionada', { id_solicitud_aceptada: requestId });
         await client.query("UPDATE donacion SET estado='en_proceso',fecha_actualizacion=now() WHERE id_donacion=$1", [donation.id_donacion]);
         await audit(client, req.user.id_usuario, 'donacion', donation.id_donacion, 'iniciar_proceso', { id_solicitud: requestId });
+        await createTracking(client, requestId, req.user.id_usuario, req.user.es_demostracion);
       }
       await audit(client, req.user.id_usuario, 'solicitud', requestId, action, { motivo: motivo || null, id_donacion: donation.id_donacion });
       return updated;
@@ -242,9 +275,9 @@ export async function getStats() {
     (SELECT count(*)::int FROM usuario) AS usuarios,
     (SELECT count(*)::int FROM donante) AS donantes,
     (SELECT count(*)::int FROM organizacion) AS organizaciones,
-    (SELECT count(*)::int FROM donacion) AS donaciones,
-    (SELECT count(*)::int FROM donacion WHERE estado='disponible') AS disponibles,
-    (SELECT count(*)::int FROM donacion WHERE estado='en_proceso') AS en_proceso,
+    (SELECT count(*)::int FROM donacion WHERE NOT ocultar_presentacion) AS donaciones,
+    (SELECT count(*)::int FROM donacion WHERE estado='disponible' AND NOT ocultar_presentacion) AS disponibles,
+    (SELECT count(*)::int FROM donacion WHERE estado='en_proceso' AND NOT ocultar_presentacion) AS en_proceso,
     (SELECT count(*)::int FROM solicitud) AS solicitudes,
     (SELECT count(*)::int FROM solicitud WHERE estado='pendiente') AS solicitudes_pendientes,
     (SELECT count(*)::int FROM evaluacion_ruta) AS evaluaciones_logisticas,

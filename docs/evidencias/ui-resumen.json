@@ -1,58 +1,58 @@
 {
-  "fecha_inicio": "2026-10-21T10:36:32.013Z",
-  "ejecucion": "mvhz8xmz",
+  "fecha_inicio": "2026-10-21T12:39:41.076Z",
+  "ejecucion": "mvi3mpmz",
   "navegador": "Google Chrome del sistema / Playwright",
   "proveedor_real_sin_mocks": true,
   "pruebas": [
     {
       "nombre": "E2E real: publicar, recargar, consultar ruta por carretera, solicitar y aceptar",
       "estado": "passed",
-      "duracion_ms": 30961,
+      "duracion_ms": 12509,
       "error": null
     },
     {
       "nombre": "E2E real: editar donación, cancelar solicitud y cancelar publicación; modal con teclado",
       "estado": "passed",
-      "duracion_ms": 13938,
+      "duracion_ms": 11496,
       "error": null
     },
     {
       "nombre": "Responsive real a 360 px: landing, login, menú y dashboard sin desbordamiento",
       "estado": "passed",
-      "duracion_ms": 2737,
+      "duracion_ms": 2232,
       "error": null
     },
     {
       "nombre": "Seguridad UI: contenido almacenado se muestra como texto y no crea elementos ejecutables",
       "estado": "passed",
-      "duracion_ms": 5120,
+      "duracion_ms": 4888,
       "error": null
     }
   ],
   "registros_creados": [
     {
-      "id_donacion": 9,
-      "alimento": "Prueba UI mvhz8xmz aceptacion",
+      "id_donacion": 36,
+      "alimento": "Prueba UI mvi3mpmz aceptacion",
       "coordenadas": [
         -15.840908,
         -70.028958
       ]
     },
     {
-      "id_solicitud": 3,
-      "id_donacion": 9
+      "id_solicitud": 17,
+      "id_donacion": 36
     },
     {
-      "id_donacion": 10,
-      "alimento": "Prueba UI mvhz8xmz cancelacion",
+      "id_donacion": 37,
+      "alimento": "Prueba UI mvi3mpmz cancelacion",
       "coordenadas": [
         -15.840908,
         -70.028958
       ]
     },
     {
-      "id_donacion": 11,
-      "alimento": "Prueba UI mvhz8xmz marcado",
+      "id_donacion": 38,
+      "alimento": "Prueba UI mvi3mpmz marcado",
       "coordenadas": [
         -15.840908,
         -70.028958
@@ -63,9 +63,9 @@
   "errores_consola": [],
   "respuestas_api_error": [],
   "ruta_real": {
-    "id_donacion": 9,
+    "id_donacion": 36,
     "proveedor": "OSRM / OpenStreetMap (servicio público académico)",
-    "fecha_calculo": "2026-10-21T10:34:17.049Z",
+    "fecha_calculo": "2026-10-21T12:31:25.308Z",
     "distancia_km": 1.258,
     "duracion_estimada_min": 3,
     "puntos_geometria": 23,
@@ -75,13 +75,13 @@
       "cargadas": 6
     }
   },
-  "fecha_fin": "2026-10-21T10:37:25.870Z",
+  "fecha_fin": "2026-10-21T12:40:12.967Z",
   "cancelacion_solicitud": {
-    "id_solicitud": 4,
+    "id_solicitud": 18,
     "estado": "cancelada"
   },
   "cancelacion_donacion": {
-    "id_donacion": 10,
+    "id_donacion": 37,
     "estado": "cancelada",
     "modal_teclado": true,
     "secuencia_foco": [
@@ -142,84 +142,8 @@
     }
   },
   "marcado_almacenado": {
-    "id_donacion": 11,
+    "id_donacion": 38,
     "mostrado_como_texto": true,
     "elementos_ejecutables": 0
-  },
-  "registros_auditables_prueba_ui": {
-    "donaciones": 8,
-    "solicitudes": 4,
-    "detalle_donaciones": [
-      {
-        "id_donacion": 4,
-        "alimento": "Prueba UI mvhyz62v aceptacion",
-        "estado": "disponible"
-      },
-      {
-        "id_donacion": 5,
-        "alimento": "Prueba UI mvhyzou4 cancelacion",
-        "estado": "disponible"
-      },
-      {
-        "id_donacion": 6,
-        "alimento": "Prueba UI mvhz5ubl aceptacion",
-        "estado": "en_proceso"
-      },
-      {
-        "id_donacion": 7,
-        "alimento": "Prueba UI mvhz5ubl cancelacion",
-        "estado": "disponible"
-      },
-      {
-        "id_donacion": 8,
-        "alimento": "Prueba UI mvhz5ubl marcado <img src=x onerror=\"window.__uiXss=true\">",
-        "estado": "cancelada"
-      },
-      {
-        "id_donacion": 9,
-        "alimento": "Prueba UI mvhz8xmz aceptacion",
-        "estado": "en_proceso"
-      },
-      {
-        "id_donacion": 10,
-        "alimento": "Prueba UI mvhz8xmz cancelacion",
-        "estado": "cancelada"
-      },
-      {
-        "id_donacion": 11,
-        "alimento": "Prueba UI mvhz8xmz marcado <img src=x onerror=\"window.__uiXss=true\">",
-        "estado": "cancelada"
-      }
-    ],
-    "detalle_solicitudes": [
-      {
-        "id_solicitud": 1,
-        "id_donacion": 6,
-        "estado": "aceptada"
-      },
-      {
-        "id_solicitud": 2,
-        "id_donacion": 7,
-        "estado": "cancelada"
-      },
-      {
-        "id_solicitud": 3,
-        "id_donacion": 9,
-        "estado": "aceptada"
-      },
-      {
-        "id_solicitud": 4,
-        "id_donacion": 10,
-        "estado": "cancelada"
-      }
-    ]
-  },
-  "capturas_entrega": [
-    "landing-desktop.png",
-    "donante-desktop.png",
-    "ruta-real.png",
-    "mobile.png",
-    "portada-vista.png",
-    "ruta-vista.png"
-  ]
+  }
 }

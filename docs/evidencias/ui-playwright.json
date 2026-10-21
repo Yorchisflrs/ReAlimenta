@@ -104,6 +104,150 @@
   },
   "suites": [
     {
+      "title": "custodia.spec.mjs",
+      "file": "custodia.spec.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Catálogo presentable: fotografías, direcciones y rutas sin publicaciones técnicas",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3537,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-21T12:39:12.893Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ece91c16872bdcabc443-4d4e9828fe3911ec6806",
+          "file": "custodia.spec.mjs",
+          "line": 46,
+          "column": 1
+        },
+        {
+          "title": "Seguimiento real: mapa por carretera, verde y rojo, escenario de tráfico y administración",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4558,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-21T12:39:16.750Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ece91c16872bdcabc443-d4ba6456dadb4a20e045",
+          "file": "custodia.spec.mjs",
+          "line": 57,
+          "column": 1
+        },
+        {
+          "title": "Cadena de custodia completa en navegador: hitos, transferencia, incidencia y resolución",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 14223,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-21T12:39:21.330Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ece91c16872bdcabc443-9538c53239c5ef2881cc",
+          "file": "custodia.spec.mjs",
+          "line": 75,
+          "column": 1
+        },
+        {
+          "title": "Seguimiento móvil a 360 px: catálogo, mapa, incidencias y formularios accesibles",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5446,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-21T12:39:35.584Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ece91c16872bdcabc443-06359f3c8dac3bfd96e9",
+          "file": "custodia.spec.mjs",
+          "line": 93,
+          "column": 1
+        }
+      ]
+    },
+    {
       "title": "ui.spec.mjs",
       "file": "ui.spec.mjs",
       "column": 0,
@@ -125,12 +269,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 31081,
+                  "duration": 12625,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T10:36:32.070Z",
+                  "startTime": "2026-10-21T12:39:41.091Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -159,12 +303,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 14190,
+                  "duration": 11742,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T10:37:03.477Z",
+                  "startTime": "2026-10-21T12:39:53.743Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -174,7 +318,7 @@
           ],
           "id": "3c8ab3ee350f564cbc79-160a1965075b7a646b03",
           "file": "ui.spec.mjs",
-          "line": 202,
+          "line": 204,
           "column": 1
         },
         {
@@ -193,12 +337,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2809,
+                  "duration": 2336,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T10:37:17.707Z",
+                  "startTime": "2026-10-21T12:40:05.506Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -208,7 +352,7 @@
           ],
           "id": "3c8ab3ee350f564cbc79-c2b62ebea95e1664cf90",
           "file": "ui.spec.mjs",
-          "line": 257,
+          "line": 259,
           "column": 1
         },
         {
@@ -227,12 +371,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5266,
+                  "duration": 5058,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T10:37:20.559Z",
+                  "startTime": "2026-10-21T12:40:07.864Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -242,7 +386,7 @@
           ],
           "id": "3c8ab3ee350f564cbc79-abe83371ff2c9ab59772",
           "file": "ui.spec.mjs",
-          "line": 274,
+          "line": 277,
           "column": 1
         }
       ]
@@ -250,9 +394,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-10-21T10:36:30.929Z",
-    "duration": 55358.207,
-    "expected": 4,
+    "startTime": "2026-10-21T12:39:12.208Z",
+    "duration": 61406.068,
+    "expected": 8,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0
