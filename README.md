@@ -57,6 +57,19 @@ Los parámetros logísticos son demostrativos, no reglas sanitarias. El formular
 
 Con un PostgreSQL instalado/externo, crear base y usuario, configurar `DATABASE_URL` y ejecutar `db:migrate`, `db:seed` y `start`. No ejecutar `db:start` contra un servidor externo: está limitado al entorno portable local. El usuario de pruebas necesita permiso `CREATEDB` para su base aislada temporal; una cuenta productiva no necesita ese permiso para operaciones normales.
 
+### Con PostgreSQL ya instalado en Windows
+
+Desde la carpeta del proyecto, con el servicio de PostgreSQL iniciado (puerto 5432 por defecto):
+
+```powershell
+$env:PGPASSWORD = 'CONTRASENA_DE_POSTGRES'
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h 127.0.0.1 -U postgres -c "CREATE ROLE realimenta LOGIN CREATEDB PASSWORD 'CAMBIAR_CONTRASENA';"
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h 127.0.0.1 -U postgres -c "CREATE DATABASE realimenta OWNER realimenta ENCODING 'UTF8' TEMPLATE template0;"
+Copy-Item .env.example .env
+```
+
+En `.env`, cambiar `DATABASE_URL` a `postgresql://realimenta:CAMBIAR_CONTRASENA@127.0.0.1:5432/realimenta`. Luego ejecutar `npm install`, `npm run db:migrate`, `npm run db:seed` y `npm start`. En los siguientes arranques basta `npm start`, porque el servicio de PostgreSQL inicia con Windows.
+
 ## Cuentas de demostración
 
 Contraseña pública y exclusiva de prueba para las cuatro cuentas: **`Realimenta2026!`**.
