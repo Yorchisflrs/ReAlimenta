@@ -18,7 +18,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const main = $('#main-content');
   const dialog = $('#app-dialog');
   let picker = null;
-  let loadCount = 0;
   let lastFocus = null;
   function toast(message) {
     const item = document.createElement('div');

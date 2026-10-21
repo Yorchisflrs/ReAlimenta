@@ -433,7 +433,7 @@ La demostración académica requiere arranque sin errores, conexión PostgreSQL,
 
 ## 10 Resultados de pruebas
 
-La suite de API, PostgreSQL, logística y errores de proveedores aprobó 23 de 23 pruebas, sin fallos ni omitidas. El reporte generado por el ejecutor está en docs/evidencias/pruebas-unitarias-integracion.tap. La suite de navegador aprobó 4 de 4 pruebas: publicar y aceptar entre roles con ruta real, editar y cancelar, adaptación móvil y protección frente a contenido almacenado ejecutable. Registró cero errores JavaScript y cero errores de consola. La evidencia está en ui-resumen.json y ui-playwright.json. Se verificó también la parada y arranque de PostgreSQL sin pérdida de la base y sin sobrescribir credenciales. Una prueba local no constituye un SLA productivo.
+La suite de API, PostgreSQL, logística, custodia y errores de proveedores aprobó 32 de 32 pruebas, sin fallos ni omitidas. El reporte generado por el ejecutor está en docs/evidencias/custodia-servidor.tap; la primera ejecución de 23 pruebas se conserva en pruebas-unitarias-integracion.tap. La suite de navegador aprobó 4 de 4 pruebas: publicar y aceptar entre roles con ruta real, editar y cancelar, adaptación móvil y protección frente a contenido almacenado ejecutable. Registró cero errores JavaScript y cero errores de consola. La evidencia está en ui-resumen.json y ui-playwright.json. Se verificó también la parada y arranque de PostgreSQL sin pérdida de la base y sin sobrescribir credenciales. Una prueba local no constituye un SLA productivo.
 
 ## 11 Limitaciones
 

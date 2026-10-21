@@ -40,7 +40,7 @@ Para cada exposición crear una publicación nueva con fechas relativas al momen
 | 17 | Cerrar sesión del donante e iniciar como organización. | Se identifica nuevamente al solicitante, sin reutilizar un rol anterior. |
 | 18 | Abrir Mis solicitudes y comprobar **S**. Recargar. | Sigue Aceptada; la publicación no vuelve a Disponible por recargar. |
 | 19 | Abrir localmente `docs/Requerimientos_No_Funcionales_REAlimenta.md` o su Word `.docx`. | Mostrar códigos, métricas/criterios, evidencia y límites; los objetivos no medidos no se presentan como cumplidos. |
-| 20 | Mostrar los reportes de prueba o ejecutar las pruebas indicadas abajo. | 23/23 API/lógica y 4/4 UI en la evidencia registrada; identificar fecha, ambiente y cobertura exacta. |
+| 20 | Mostrar los reportes de prueba o ejecutar las pruebas indicadas abajo. | 32/32 API/lógica (custodia-servidor.tap) y pruebas UI en la evidencia registrada; identificar fecha, ambiente y cobertura exacta. |
 
 Los documentos se abren desde el repositorio/Explorador/Word. El servidor no publica la carpeta `docs`, ni credenciales, ni código backend como archivos estáticos.
 
