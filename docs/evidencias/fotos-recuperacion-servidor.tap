@@ -1,0 +1,322 @@
+TAP version 13
+# Subtest: API y PostgreSQL real responden con fecha del servidor
+ok 1 - API y PostgreSQL real responden con fecha del servidor
+  ---
+  duration_ms: 4091.1028
+  type: 'test'
+  ...
+# Subtest: Custodia: aceptación crea seguimiento con instantáneas, permisos y secuencia sin saltos
+ok 2 - Custodia: aceptación crea seguimiento con instantáneas, permisos y secuencia sin saltos
+  ---
+  duration_ms: 136.327
+  type: 'test'
+  ...
+# Subtest: Custodia: transferencias requieren responsables, concurrencia protegida y recepción completa
+ok 3 - Custodia: transferencias requieren responsables, concurrencia protegida y recepción completa
+  ---
+  duration_ms: 323.6187
+  type: 'test'
+  ...
+# Subtest: Incidencias: acceso por participante, no conformidad automática y resolución solo administrativa
+ok 4 - Incidencias: acceso por participante, no conformidad automática y resolución solo administrativa
+  ---
+  duration_ms: 110.7058
+  type: 'test'
+  ...
+# Subtest: Presentación: ocultar registros técnicos conserva detalle y excluye catálogo y seguimiento
+ok 5 - Presentación: ocultar registros técnicos conserva detalle y excluye catálogo y seguimiento
+  ---
+  duration_ms: 94.0653
+  type: 'test'
+  ...
+# Subtest: Custodia: una incidencia crítica abierta impide confirmar recepción y conserva el historial
+ok 6 - Custodia: una incidencia crítica abierta impide confirmar recepción y conserva el historial
+  ---
+  duration_ms: 213.6873
+  type: 'test'
+  ...
+# Subtest: Autenticación: hash scrypt, cookie protegida, rol, error y cierre de sesión
+ok 7 - Autenticación: hash scrypt, cookie protegida, rol, error y cierre de sesión
+  ---
+  duration_ms: 198.6248
+  type: 'test'
+  ...
+# Subtest: Seguridad: autenticación, roles, CSRF, Origin, páginas y archivos privados
+ok 8 - Seguridad: autenticación, roles, CSRF, Origin, páginas y archivos privados
+  ---
+  duration_ms: 57.5196
+  type: 'test'
+  ...
+# Subtest: Registro público: administrador prohibido, perfil pendiente y datos geográficos persistentes
+ok 9 - Registro público: administrador prohibido, perfil pendiente y datos geográficos persistentes
+  ---
+  duration_ms: 240.0167
+  type: 'test'
+  ...
+# Subtest: Donaciones: creación, consulta, filtro, detalle, edición y cancelación persistentes
+ok 10 - Donaciones: creación, consulta, filtro, detalle, edición y cancelación persistentes
+  ---
+  duration_ms: 88.6536
+  type: 'test'
+  ...
+# Subtest: Donaciones: cantidad, cronología, coordenadas y obligatorios inválidos producen 422 comprensible
+ok 11 - Donaciones: cantidad, cronología, coordenadas y obligatorios inválidos producen 422 comprensible
+  ---
+  duration_ms: 62.3773
+  type: 'test'
+  ...
+# Subtest: Propiedad: otro donante no puede leer, editar, cancelar ni aceptar donaciones ajenas
+ok 12 - Propiedad: otro donante no puede leer, editar, cancelar ni aceptar donaciones ajenas
+  ---
+  duration_ms: 310.0905
+  type: 'test'
+  ...
+# Subtest: Solicitudes: creación, persistencia, datos anidados, duplicado y bloqueo de edición
+ok 13 - Solicitudes: creación, persistencia, datos anidados, duplicado y bloqueo de edición
+  ---
+  duration_ms: 327.7901
+  type: 'test'
+  ...
+# Subtest: Solicitudes: rechazo, cancelación con propietario y reenvío permitido
+ok 14 - Solicitudes: rechazo, cancelación con propietario y reenvío permitido
+  ---
+  duration_ms: 120.5077
+  type: 'test'
+  ...
+# Subtest: Aceptación transaccional única: dos decisiones simultáneas, auto-rechazo y auditoría
+ok 15 - Aceptación transaccional única: dos decisiones simultáneas, auto-rechazo y auditoría
+  ---
+  duration_ms: 154.0471
+  type: 'test'
+  ...
+# Subtest: Vencimiento real del servidor impide nuevas solicitudes y registra historial
+ok 16 - Vencimiento real del servidor impide nuevas solicitudes y registra historial
+  ---
+  duration_ms: 113.3587
+  type: 'test'
+  ...
+# Subtest: Integridad referencial de PostgreSQL rechaza solicitud huérfana
+ok 17 - Integridad referencial de PostgreSQL rechaza solicitud huérfana
+  ---
+  duration_ms: 4.5602
+  type: 'test'
+  ...
+# Subtest: Sesiones y donaciones persisten al reiniciar instancia de aplicación; contenido XSS permanece texto JSON
+ok 18 - Sesiones y donaciones persisten al reiniciar instancia de aplicación; contenido XSS permanece texto JSON
+  ---
+  duration_ms: 201.8903
+  type: 'test'
+  ...
+# Subtest: Persistencia de donaciones y sesiones después de detener y reiniciar un proceso Node real
+ok 19 - Persistencia de donaciones y sesiones después de detener y reiniciar un proceso Node real
+  ---
+  duration_ms: 1178.271
+  type: 'test'
+  ...
+# Subtest: Auditoría respeta acceso por actor, donante propietario y administrador
+ok 20 - Auditoría respeta acceso por actor, donante propietario y administrador
+  ---
+  duration_ms: 17.7808
+  type: 'test'
+  ...
+# Subtest: Verde: cálculo temporal de backend suma preparación, recojo, carretera, entrega y margen
+ok 21 - Verde: cálculo temporal de backend suma preparación, recojo, carretera, entrega y margen
+  ---
+  duration_ms: 2.3451
+  type: 'test'
+  ...
+# Subtest: Amarillo: margen positivo menor al umbral configurable
+ok 22 - Amarillo: margen positivo menor al umbral configurable
+  ---
+  duration_ms: 0.6112
+  type: 'test'
+  ...
+# Subtest: Rojo: tiempo total igual al disponible no es viable
+ok 23 - Rojo: tiempo total igual al disponible no es viable
+  ---
+  duration_ms: 0.5867
+  type: 'test'
+  ...
+# Subtest: Gris: falta fecha o ruta y nunca inventa duración
+ok 24 - Gris: falta fecha o ruta y nunca inventa duración
+  ---
+  duration_ms: 0.4246
+  type: 'test'
+  ...
+# Subtest: Cadena de frío declarada sin medios produce rojo; sin declaración produce gris
+ok 25 - Cadena de frío declarada sin medios produce rojo; sin declaración produce gris
+  ---
+  duration_ms: 0.5288
+  type: 'test'
+  ...
+# Subtest: Ventana futura y fecha de recojo también cuentan
+ok 26 - Ventana futura y fecha de recojo también cuentan
+  ---
+  duration_ms: 0.3774
+  type: 'test'
+  ...
+# Subtest: Coordenadas inválidas y tiempos negativos se rechazan
+ok 27 - Coordenadas inválidas y tiempos negativos se rechazan
+  ---
+  duration_ms: 1.1357
+  type: 'test'
+  ...
+# Subtest: Un plazo declarado de una hora nunca permite un traslado estimado de tres horas
+ok 28 - Un plazo declarado de una hora nunca permite un traslado estimado de tres horas
+  ---
+  duration_ms: 0.6582
+  type: 'test'
+  ...
+# Subtest: El escenario de tráfico suma demora manual sin presentarse como tráfico vivo
+ok 29 - El escenario de tráfico suma demora manual sin presentarse como tráfico vivo
+  ---
+  duration_ms: 0.7672
+  type: 'test'
+  ...
+# Subtest: Tras el recojo no se vuelve a contar preparación ni se rechaza una ventana de recojo ya cumplida
+ok 30 - Tras el recojo no se vuelve a contar preparación ni se rechaza una ventana de recojo ya cumplida
+  ---
+  duration_ms: 0.8158
+  type: 'test'
+  ...
+# Subtest: Una incidencia crítica o condición no conforme prevalece sobre margen suficiente
+ok 31 - Una incidencia crítica o condición no conforme prevalece sobre margen suficiente
+  ---
+  duration_ms: 0.8523
+  type: 'test'
+  ...
+# Subtest: Fotografías: JPG válido se recodifica a WebP, rota, reduce a 1600 y elimina EXIF/ICC
+ok 32 - Fotografías: JPG válido se recodifica a WebP, rota, reduce a 1600 y elimina EXIF/ICC
+  ---
+  duration_ms: 4124.8887
+  type: 'test'
+  ...
+# Subtest: Fotografías: PNG y WebP válidos mantienen proporción sin ampliar y aparecen en detalle/catalogo
+ok 33 - Fotografías: PNG y WebP válidos mantienen proporción sin ampliar y aparecen en detalle/catalogo
+  ---
+  duration_ms: 179.8072
+  type: 'test'
+  ...
+# Subtest: Fotografías: rechaza SVG/GIF, PNG presentado como JPG, GIF/SVG como PNG y texto como JPG
+ok 34 - Fotografías: rechaza SVG/GIF, PNG presentado como JPG, GIF/SVG como PNG y texto como JPG
+  ---
+  duration_ms: 132.5015
+  type: 'test'
+  ...
+# Subtest: Fotografías: límite 5 MB y límite 25 megapíxeles con errores comprensibles
+ok 35 - Fotografías: límite 5 MB y límite 25 megapíxeles con errores comprensibles
+  ---
+  duration_ms: 317.6992
+  type: 'test'
+  ...
+# Subtest: Fotografías: álbum máximo tres incluso con dos cargas finales simultáneas; primera portada estable
+ok 36 - Fotografías: álbum máximo tres incluso con dos cargas finales simultáneas; primera portada estable
+  ---
+  duration_ms: 345.6931
+  type: 'test'
+  ...
+# Subtest: Fotografías: exige sesión, CSRF, donante verificado y propiedad
+ok 37 - Fotografías: exige sesión, CSRF, donante verificado y propiedad
+  ---
+  duration_ms: 225.1653
+  type: 'test'
+  ...
+# Subtest: Fotografías: solicitudes activas y estado cancelado bloquean nuevas cargas
+ok 38 - Fotografías: solicitudes activas y estado cancelado bloquean nuevas cargas
+  ---
+  duration_ms: 166.2258
+  type: 'test'
+  ...
+# Subtest: Fotografías privadas: dueño/admin/catálogo elegible acceden; anónimo/otro donante no
+ok 39 - Fotografías privadas: dueño/admin/catálogo elegible acceden; anónimo/otro donante no
+  ---
+  duration_ms: 345.9469
+  type: 'test'
+  ...
+# Subtest: Fotografías privadas: vencida u oculta no es catálogo; organización con solicitud propia conserva acceso
+ok 40 - Fotografías privadas: vencida u oculta no es catálogo; organización con solicitud propia conserva acceso
+  ---
+  duration_ms: 536.7842
+  type: 'test'
+  ...
+# Subtest: Fotografías: solicitudes y seguimiento conservan álbum para los participantes autorizados
+ok 41 - Fotografías: solicitudes y seguimiento conservan álbum para los participantes autorizados
+  ---
+  duration_ms: 292.588
+  type: 'test'
+  ...
+# Subtest: Fallo externo y NoRoute no generan distancia ni duración ficticia
+ok 42 - Fallo externo y NoRoute no generan distancia ni duración ficticia
+  ---
+  duration_ms: 2385.7456
+  type: 'test'
+  ...
+# Subtest: Recuperación: respuesta genérica sin token para correo inexistente, cuenta real, administrador e inactiva
+ok 43 - Recuperación: respuesta genérica sin token para correo inexistente, cuenta real, administrador e inactiva
+  ---
+  duration_ms: 3029.2139
+  type: 'test'
+  ...
+# Subtest: Recuperación demo donante y organización: código fuerte, hash PG y expiración de diez minutos
+ok 44 - Recuperación demo donante y organización: código fuerte, hash PG y expiración de diez minutos
+  ---
+  duration_ms: 54.839
+  type: 'test'
+  ...
+# Subtest: Recuperación: código inválido o ausente no cambia la contraseña; contraseña débil no consume código
+ok 45 - Recuperación: código inválido o ausente no cambia la contraseña; contraseña débil no consume código
+  ---
+  duration_ms: 37.0345
+  type: 'test'
+  ...
+# Subtest: Recuperación: código vencido según PostgreSQL no restablece
+ok 46 - Recuperación: código vencido según PostgreSQL no restablece
+  ---
+  duration_ms: 27.6504
+  type: 'test'
+  ...
+# Subtest: Recuperación: emitir otro código invalida el previo y conserva solo uno pendiente
+ok 47 - Recuperación: emitir otro código invalida el previo y conserva solo uno pendiente
+  ---
+  duration_ms: 89.0901
+  type: 'test'
+  ...
+# Subtest: Recuperación: cambia hash scrypt, revoca todas las sesiones, uso único y no inicia sesión
+ok 48 - Recuperación: cambia hash scrypt, revoca todas las sesiones, uso único y no inicia sesión
+  ---
+  duration_ms: 443.7648
+  type: 'test'
+  ...
+# Subtest: Recuperación: dos restablecimientos simultáneos del mismo código solo permiten uno
+ok 49 - Recuperación: dos restablecimientos simultáneos del mismo código solo permiten uno
+  ---
+  duration_ms: 188.9254
+  type: 'test'
+  ...
+# Subtest: Recuperación: ni cuentas reales ni administrador se restablecen incluso con token inyectado en prueba
+ok 50 - Recuperación: ni cuentas reales ni administrador se restablecen incluso con token inyectado en prueba
+  ---
+  duration_ms: 22.8598
+  type: 'test'
+  ...
+# Subtest: Recuperación: en producción no emite ni acepta códigos demo
+ok 51 - Recuperación: en producción no emite ni acepta códigos demo
+  ---
+  duration_ms: 11.4642
+  type: 'test'
+  ...
+# Subtest: Recuperación: comprobación Origin y límites por correo para solicitud y restablecimiento
+ok 52 - Recuperación: comprobación Origin y límites por correo para solicitud y restablecimiento
+  ---
+  duration_ms: 102.9693
+  type: 'test'
+  ...
+1..52
+# tests 52
+# suites 0
+# pass 52
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8615.2212

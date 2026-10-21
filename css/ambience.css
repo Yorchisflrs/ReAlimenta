@@ -1,0 +1,40 @@
+/* Fondos fotográficos locales. La fotografía nunca se superpone a formularios, tablas o mapas. */
+body[data-ambient] { --ambient-cream:#f8f3e7; --ambient-border:#e7e3d4; }
+.mvp-app .mvp-page-header.has-ambience { position:relative; isolation:isolate; overflow:hidden; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:17px; min-height:208px; border:1px solid var(--ambient-border); border-radius:17px; padding:30px 32px; background:linear-gradient(115deg,#fcfaf1 0%,#f6f2e4 65%,#e7eee0 100%); }
+.mvp-page-header.has-ambience>div:not(.ambience-header-photo) { position:relative; z-index:2; width:61%; max-width:760px; }
+.mvp-page-header.has-ambience .section-kicker { color:#57704c; font-size:.52rem; }
+.mvp-page-header.has-ambience h1 { color:#244d36; max-width:100%; font-size:clamp(1.55rem,2.1vw,2.15rem); margin-bottom:10px; }
+.mvp-page-header.has-ambience p { color:#516b49; font-size:.76rem; max-width:610px; }
+.mvp-page-header.has-ambience .header-actions { margin:0; flex-wrap:wrap; gap:9px; }
+.mvp-page-header.has-ambience .header-actions:empty { display:none; }
+.ambience-header-photo { position:absolute; inset:0 0 0 auto; z-index:0; width:46%; background-size:cover; background-repeat:no-repeat; background-position:center; pointer-events:none; }
+.ambience-header-photo::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,#f8f4e8 0%,#f8f4e8d9 14%,#f8f4e842 37%,#f8f4e800 70%),linear-gradient(0deg,#204b2c12,#fff5dc12); }
+.ambience-header-photo[data-ambient-image="feria"] { background-position:center 43%; }
+.ambience-header-photo[data-ambient-image="trucha"] { background-position:56% center; }
+.ambience-header-photo[data-ambient-image="plato"] { background-position:56% center; }
+.ambience-header-photo[data-ambient-image="quesos"] { background-position:center 45%; }
+.mvp-page-header.has-ambience[data-ambient-image="pan"] { min-height:280px; background:linear-gradient(110deg,#fbf8ed 0%,#f4eddb 57%,#e8ebdc 100%); }
+.mvp-page-header.has-ambience[data-ambient-image="pan"]>div:not(.ambience-header-photo) { width:55%; }
+.ambience-header-photo[data-ambient-image="pan"] { inset:15px 20px 34px auto; width:40%; background-size:contain; background-position:center; background-color:#f7f1e2; border-radius:9px; }
+.ambience-header-photo[data-ambient-image="pan"]::after { display:none; }
+.ambience-original-caption { position:absolute; bottom:-23px; right:0; left:0; font-size:.48rem; line-height:1.6; text-align:center; color:#586a47; background:none; }
+.mvp-app[data-ambient="feria"] .mvp-feature-banner { position:relative; isolation:isolate; background:linear-gradient(90deg,#dfebd5 0%,#dfebd5f0 48%,#dfebd542 100%),url('../assets/images/fondos/feria-gastronomica-puno.jpeg') right 44%/auto 100% no-repeat; }
+.mvp-app[data-ambient="feria"] .mvp-feature-banner>.route-illustration { opacity:0; pointer-events:none; }
+.mvp-app[data-ambient="feria"] .mvp-feature-banner>div:first-child { position:relative; z-index:1; }
+.mvp-app[data-ambient="feria"] .mvp-feature-banner p { color:#4f6c43; }
+.mvp-auth-aside.has-ambient-photo { position:relative; isolation:isolate; background-color:#0a4f3d; background-image:linear-gradient(180deg,#073d31a6 0%,#07513e99 24%,#074533e8 53%,#074533 80%),var(--auth-ambient-image); background-size:cover; background-position:center top; }
+.mvp-auth-aside.has-ambient-photo .brand,.mvp-auth-aside.has-ambient-photo .auth-story,.mvp-auth-aside.has-ambient-photo .auth-aside-bottom { position:relative; z-index:2; }
+.mvp-auth-aside.has-ambient-photo .auth-story { padding-top:130px; }
+.mvp-auth-aside.has-ambient-photo::after { opacity:.25; }
+.ambience-auth-banner { display:none; height:155px; margin:-8px 0 28px; border:1px solid #e4e6d5; border-radius:13px; background-position:center 45%; background-size:cover; background-repeat:no-repeat; position:relative; overflow:hidden; }
+.ambience-auth-banner::after { content:''; position:absolute; inset:0; background:linear-gradient(0deg,#fbfcf85e 0%,#fbfcf800 55%),linear-gradient(90deg,#e3ebd315,#e3ebd300); }
+.mvp-public[data-ambient] .landing-cta { background-color:#0a674d; background-image:linear-gradient(90deg,#07573fed 0%,#07573fe0 45%,#07573f8c 100%),url('../assets/images/fondos/feria-gastronomica-puno.jpeg'); background-position:center,right 40%; background-size:cover,auto 155%; background-repeat:no-repeat; }
+.mvp-public[data-ambient] .landing-cta::after { display:none; }
+.mvp-public[data-ambient] .landing-cta h2 { text-shadow:0 2px 14px #073f3429; }
+.mvp-public[data-ambient] .landing-cta .small-kicker { color:#e0eac9; }
+.mvp-public[data-ambient] .landing-responsibility { background:linear-gradient(90deg,#fdfcf8ff 0%,#fdfcf8fa 54%,#fdfcf8cc 75%,#fdfcf8a8 100%),url('../assets/images/fondos/quesos-artesanales.jpeg') right center/auto 100% no-repeat; }
+@media(min-width:1500px) { .mvp-app .mvp-page-header.has-ambience { min-height:220px; } .mvp-app .mvp-page-header.has-ambience[data-ambient-image="pan"] { min-height:310px; } }
+@media(max-width:1100px) { .mvp-page-header.has-ambience>div:not(.ambience-header-photo) { width:65%; } .ambience-header-photo { width:45%; } .mvp-page-header.has-ambience[data-ambient-image="pan"] { min-height:260px; } .ambience-header-photo[data-ambient-image="pan"] { right:14px; width:40%; } }
+@media(max-width:850px) { .mvp-app .mvp-page-header.has-ambience { padding:27px; min-height:220px; } .mvp-page-header.has-ambience>div:not(.ambience-header-photo) { width:65%; } .mvp-page-header.has-ambience h1 { font-size:1.7rem; } .mvp-page-header.has-ambience p { font-size:.71rem; } .mvp-page-header.has-ambience[data-ambient-image="pan"]>div:not(.ambience-header-photo) { width:56%; } .ambience-header-photo[data-ambient-image="pan"] { width:39%; } .registration-layout .ambience-auth-banner { display:block; } }
+@media(max-width:680px) { .mvp-app .mvp-page-header.has-ambience { padding:171px 23px 24px; display:flex; min-height:340px; border-radius:14px; gap:17px; } .mvp-page-header.has-ambience>div:not(.ambience-header-photo),.mvp-page-header.has-ambience[data-ambient-image="pan"]>div:not(.ambience-header-photo) { width:100%; } .mvp-page-header.has-ambience h1 { font-size:1.65rem; line-height:1.2; } .mvp-page-header.has-ambience .section-kicker { font-size:.45rem; } .mvp-page-header.has-ambience p { font-size:.7rem; line-height:1.75; } .ambience-header-photo { inset:0 0 auto; width:100%; height:165px; background-position:center 40%; } .ambience-header-photo::after { background:linear-gradient(0deg,#f8f4e8 0%,#f8f4e8bd 12%,#f8f4e800 47%); } .ambience-header-photo[data-ambient-image="feria"] { background-position:center 38%; } .mvp-page-header.has-ambience[data-ambient-image="pan"] { min-height:410px; padding-top:235px; } .ambience-header-photo[data-ambient-image="pan"] { inset:12px 12px auto; width:calc(100% - 24px); height:194px; background-size:contain; background-position:center; } .ambience-original-caption { font-size:.43rem; bottom:-21px; } .ambience-auth-banner { display:block; height:165px; } .mvp-app[data-ambient="feria"] .mvp-feature-banner { background:linear-gradient(90deg,#dfebd5f2 0%,#dfebd5e6 60%,#dfebd59c 100%),url('../assets/images/fondos/feria-gastronomica-puno.jpeg') right center/cover no-repeat; } .mvp-public[data-ambient] .landing-cta { background-size:cover,auto 100%; } .mvp-public[data-ambient] .landing-responsibility { background-size:cover,auto 50%; background-position:center,right bottom; } }
+@media(prefers-reduced-motion:reduce) { .ambience-header-photo,.ambience-auth-banner { animation:none; } }

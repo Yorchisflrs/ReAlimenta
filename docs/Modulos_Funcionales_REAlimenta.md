@@ -1,5 +1,7 @@
 # MÓDULOS FUNCIONALES DEL SISTEMA REAlimenta
 
+Actualización de alcance del 21 de octubre de 2026: seguimiento y custodia manual, recepción e incidencias ya están implementados. La ampliación vigente se documenta en [Seguimiento y custodia](Seguimiento_y_Custodia_REAlimenta.md), con nuevas pruebas y catálogo fotográfico. Los ejemplos y referencias de ejecución que siguen corresponden a la primera entrega de los dos módulos prioritarios; sus pendientes de custodia/recepción/incidencias quedan sustituidos por esta ampliación.
+
 **Curso:** Taller de Desarrollo de Software. **Proyecto:** REAlimenta 2.0. **Ámbito inicial:** Puno, Perú. **Versión:** 2.0. **Fecha:** 21 de octubre de 2026.
 
 ## 1. Propósito y estado de la evidencia

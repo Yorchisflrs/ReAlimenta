@@ -8,6 +8,8 @@ import { businessRouter, getStats } from './business.js';
 import { errorHandler } from './errors.js';
 import { createLogisticsRouter } from './logistics.js';
 import { custodyRouter } from './custody.js';
+import { photoRouter,mediaRouter } from './photos.js';
+import { recoveryRouter } from './recovery.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export { pool };
@@ -22,7 +24,7 @@ export function createApp() {
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com', 'data:'],
-        imgSrc: ["'self'", 'data:', 'https:'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
@@ -44,10 +46,13 @@ export function createApp() {
   app.get('/api/public/stats', async (req, res) => res.json({ data: await getStats() }));
   app.use('/api', loadSession, csrf);
   app.use('/api/auth', authRouter);
+  app.use('/api/auth', recoveryRouter);
   app.use('/api', createLogisticsRouter({ pool, requireAuth, requireRole, csrf }));
+  app.use('/api', photoRouter);
   app.use('/api', custodyRouter);
   app.use('/api', businessRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No existe este recurso de la API.' } }));
+  app.use('/media/donaciones',loadSession,mediaRouter);
 
   const pages = { donante: 'donante.html', organizacion: 'organizacion.html', administrador: 'administrador.html' };
   for (const [role, name] of Object.entries(pages)) {
@@ -59,7 +64,7 @@ export function createApp() {
     });
   }
   app.get('/', (req, res) => res.sendFile(path.join(root, 'index.html')));
-  for (const name of ['index.html', 'login.html', 'registro.html']) app.get(`/${name}`, (req, res) => res.sendFile(path.join(root, name)));
+  for (const name of ['index.html', 'login.html', 'registro.html','recuperar.html']) app.get(`/${name}`, (req, res) => res.sendFile(path.join(root, name)));
   for (const directory of ['assets', 'css', 'js']) app.use(`/${directory}`, express.static(path.join(root, directory), { dotfiles: 'deny', index: false }));
   app.use('/vendor/leaflet', express.static(path.join(root, 'node_modules/leaflet/dist'), { dotfiles: 'deny', index: false }));
   app.use((req, res) => res.status(404).type('text').send('No se encontró esta página.'));

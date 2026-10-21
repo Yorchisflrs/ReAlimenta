@@ -33,6 +33,8 @@ El siguiente arranque solo necesita `npm run db:start` y `npm start`; aplicar mi
 
 ## Configuración
 
+Actualización visual y de acceso: se integraron las cinco fotografías aportadas como fondos degradados; Donante permite hasta tres fotos propias por publicación y el acceso incluye recuperación simulada de cuentas demo. Ver [fotos y recuperación](docs/Fotos_y_Recuperacion_REAlimenta.md). Ejecutar las migraciones antes de iniciar. La simulación no envía correos reales ni restablece cuentas reales; las pruebas usan una cuenta aislada, no las cuentas principales.
+
 Consultar [.env.example](.env.example). El entorno local preparado ya contiene `.env` con la conexión: no reemplazarlo con el ejemplo ni publicar su contraseña. Añadir opciones conservando `DATABASE_URL`.
 
 | Variable | Uso |

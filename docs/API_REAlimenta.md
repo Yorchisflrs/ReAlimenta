@@ -1,5 +1,7 @@
 # API REST de REAlimenta 2.0
 
+La ampliación de seguimiento, hitos de custodia, recepción e incidencias se documenta en [Seguimiento y custodia](Seguimiento_y_Custodia_REAlimenta.md). Conserva autenticación, CSRF y permisos por participante.
+
 Versión 2.0. Fecha: 21 de octubre de 2026. Base local: `http://127.0.0.1:3000/api`. Express, PostgreSQL real y JSON UTF-8.
 
 ## Convenciones

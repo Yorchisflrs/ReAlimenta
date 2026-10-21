@@ -74,7 +74,7 @@ export function checkOrigin(req, res, next) {
   next();
 }
 export function csrf(req, res, next) {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || ['/auth/login', '/auth/register'].includes(req.path)) return next();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || ['/auth/login', '/auth/register', '/auth/recuperacion/solicitar', '/auth/recuperacion/restablecer'].includes(req.path)) return next();
   requireAuth(req, res, () => {});
   const value = req.get('x-csrf-token') || '';
   if (!/^[a-f0-9]{64}$/.test(value) || value.length !== req.csrfToken.length || !timingSafeEqual(Buffer.from(value), Buffer.from(req.csrfToken)))

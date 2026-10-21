@@ -10,7 +10,7 @@
     const s=`${d.alimento||''} ${d.categoria||''}`.toLocaleLowerCase('es');
     return /galleta/.test(s)?'galletas':/pan/.test(s)?'pan':/yogu/.test(s)?'yogur':/leche|lácte/.test(s)?'leche':/arroz|abarrote/.test(s)?'arroz':/salsa|tomate/.test(s)?'salsa':/ensalada/.test(s)?'ensalada':/crema|sopa|preparad/.test(s)?'sopa':/verd|hortal/.test(s)?'verduras':'fruta';
   }
-  function photo(d){return `assets/images/alimentos/${key(d)}.jpg`;}
+  function photo(d){const url=d.fotos?.[0]?.url;return typeof url==='string'&&/^\/media\/donaciones\/[a-f0-9]{40}\.webp$/.test(url)?url:`assets/images/alimentos/${key(d)}.jpg`;}
   function decorate(root,state){
     root.querySelectorAll('.mvp-donation-card').forEach(card=>{
       if(card.dataset.photographed)return;
@@ -18,9 +18,9 @@
       const d=state.donations.find(d=>String(d.id_donacion)===id);if(!d)return;
       card.dataset.photographed='true';
       const visual=card.querySelector('.food-visual');visual.classList.add('has-photo');
-      const img=document.createElement('img');img.src=photo(d);img.alt=`Fotografía referencial de ${d.alimento}`;img.loading='lazy';img.decoding='async';visual.prepend(img);
+      const img=document.createElement('img');img.src=photo(d);img.alt=`${d.fotos?.length?'Fotografía compartida por el donante':'Fotografía referencial'} de ${d.alimento}`;img.loading='lazy';img.decoding='async';visual.prepend(img);
       visual.querySelector(':scope > i')?.remove();
-      const reference=document.createElement('span');reference.className='photo-reference';reference.textContent='Foto referencial';visual.append(reference);
+      const reference=document.createElement('span');reference.className='photo-reference';reference.textContent=d.fotos?.length?'Foto del donante':'Foto referencial';visual.append(reference);
       const body=card.querySelector('.donation-card-body');
       if(d.cadena_custodia){
         const status=card.querySelector('.card-title-row .mvp-badge');
@@ -69,8 +69,9 @@
       }catch(error){form.querySelector('[data-route-error]').textContent=error.message;form.querySelector('[data-route-error]').hidden=false;return;}
     }
     const dest=root.querySelector('.location-steps>div:last-child strong');if(dest&&destination)dest.textContent=`${destination.nombre} · ${destination.direccion}`;
-    const hero=document.createElement('div');hero.className='detail-food-photo';hero.innerHTML=`<img src="${photo(selected)}" alt="Fotografía referencial del tipo de alimento"><span>Fotografía referencial · ${esc(profiles[selected.perfil_alimento]||profiles.general)}</span>`;
+    const hero=document.createElement('div');hero.className='detail-food-photo';hero.innerHTML=`<img src="${photo(selected)}" alt="${selected.fotos?.length?'Fotografía compartida por el donante':'Fotografía referencial del tipo de alimento'}"><span>${selected.fotos?.length?'Foto del donante':'Fotografía referencial'} · ${esc(profiles[selected.perfil_alimento]||profiles.general)}</span>`;
     root.querySelector('.detail-summary').prepend(hero);
+    if(selected.fotos?.length>1){const gallery=document.createElement('div');gallery.className='detail-food-gallery';for(const f of selected.fotos){const img=document.createElement('img');img.src=f.url;img.alt='Fotografía adicional compartida por el donante';gallery.append(img);}hero.after(gallery);}
     if(selected.plan_ruta&&(!state.selectedRequest||Number(state.selectedRequest.id_organizacion)===Number(selected.plan_ruta.id_organizacion))){ctx.displayRoute(selected.plan_ruta);}
     else if(isOrg||state.selectedRequest){
       try{
@@ -83,6 +84,7 @@
     const form=root.querySelector('#donation-form');if(!form||form.dataset.enhanced)return;
     form.dataset.enhanced='true';
     const d=form.dataset.id?state.selected:{};
+    REAImages.mount(form,d||{});
     const image=document.createElement('label');image.innerHTML=`Fotografía referencial<select class="form-control" name="imagen_clave"><option value="">Según categoría del alimento</option>${keys.map(k=>`<option value="${k}" ${k===d?.imagen_clave?'selected':''}>${esc(({pan:'Pan artesanal',fruta:'Fruta variada',verduras:'Verduras',yogur:'Yogur',arroz:'Arroz seco',sopa:'Crema de verduras',salsa:'Tomates',galletas:'Galletas',leche:'Leche',ensalada:'Ensalada'})[k])}</option>`).join('')}</select>`;
     form.querySelector('.form-grid').append(image);
     const profile=document.createElement('label');profile.innerHTML=`Tipo de alimento<select class="form-control" name="perfil_alimento">${Object.entries(profiles).map(([k,v])=>`<option value="${k}" ${k===d?.perfil_alimento?'selected':''}>${esc(v)}</option>`).join('')}</select>`;image.after(profile);

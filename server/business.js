@@ -5,6 +5,7 @@ import { fail } from './errors.js';
 import { id, text, optionalText, date, donationInput, profileInput, bool } from './validation.js';
 import { createTracking } from './custody.js';
 import { evaluateLogistics } from './logistics.js';
+import { photosSQL } from './photos.js';
 
 async function attachPlans(rows, user) {
   if (!rows.length) return rows;
@@ -41,7 +42,7 @@ export async function expireDonations() {
   });
 }
 
-const donationSelect = `SELECT d.*,dt.nombre_establecimiento AS donante_nombre,dt.id_usuario AS donante_id_usuario,
+const donationSelect = `SELECT d.*,${photosSQL('d')} AS fotos,dt.nombre_establecimiento AS donante_nombre,dt.id_usuario AS donante_id_usuario,
   dt.estado_verificacion AS donante_estado_verificacion,u.estado AS donante_estado,
   jsonb_build_object('id_donante',dt.id_donante,'nombre_establecimiento',dt.nombre_establecimiento,'direccion',dt.direccion,
   'distrito',dt.distrito,'latitud',dt.latitud,'longitud',dt.longitud,'es_demostracion',u.es_demostracion) AS donante,
@@ -54,7 +55,7 @@ const donationSelect = `SELECT d.*,dt.nombre_establecimiento AS donante_nombre,d
   FROM donacion d JOIN donante dt USING(id_donante) JOIN usuario u ON u.id_usuario=dt.id_usuario`;
 const requestSelect = `SELECT s.*,d.alimento,d.cantidad,d.unidad,d.estado AS donacion_estado,
   dt.nombre_establecimiento AS donante_nombre,o.nombre AS organizacion_nombre,
-  to_jsonb(d) AS donacion,to_jsonb(o) AS organizacion,to_jsonb(dt) AS donante,
+  to_jsonb(d)||jsonb_build_object('fotos',${photosSQL('d')}) AS donacion,to_jsonb(o) AS organizacion,to_jsonb(dt) AS donante,
   (SELECT to_jsonb(e) FROM evaluacion_ruta e WHERE e.id_solicitud=s.id_solicitud ORDER BY e.fecha_calculo DESC LIMIT 1) AS evaluacion_ruta
   FROM solicitud s JOIN donacion d USING(id_donacion) JOIN donante dt USING(id_donante)
   JOIN organizacion o USING(id_organizacion)`;

@@ -30,5 +30,11 @@
     session = result.user;
     return session;
   }
-  window.REA = { request, me, get user() { return session; }, destination(role) { return ({ donante: 'donante.html', organizacion: 'organizacion.html', administrador: 'administrador.html' })[role] || 'login.html'; } };
+  async function uploadPhoto(donationId,file){
+    const response=await fetch(`/api/donaciones/${Number(donationId)}/foto`,{method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':file.type,'x-csrf-token':csrfToken,'x-file-name':encodeURIComponent(file.name)},body:file});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok){const error=new Error(data.error?.message||'No se pudo subir la fotografía.');error.status=response.status;error.code=data.error?.code;throw error;}
+    return data;
+  }
+  window.REA = { request, me, uploadPhoto, get user() { return session; }, destination(role) { return ({ donante: 'donante.html', organizacion: 'organizacion.html', administrador: 'administrador.html' })[role] || 'login.html'; } };
 })();

@@ -4,6 +4,7 @@ import { requireAuth, requireRole } from './auth.js';
 import { fail } from './errors.js';
 import { id, text, optionalText, number, bool } from './validation.js';
 import { calculateRoute, evaluateLogistics } from './logistics.js';
+import { photosSQL } from './photos.js';
 
 export async function createTracking(client, requestId, actor, demo = false) {
   const t = (await client.query(`INSERT INTO seguimiento(id_solicitud,custodio_actual,origen,destino)
@@ -23,7 +24,7 @@ export async function createTracking(client, requestId, actor, demo = false) {
 const selectTracking = `SELECT t.*,s.id_donacion,s.id_organizacion,s.estado AS solicitud_estado,s.fecha_propuesta,s.dispone_cadena_frio,s.responsable_recojo,s.transporte_declarado,
   d.id_donante,d.alimento,d.categoria,d.cantidad,d.unidad,d.imagen_clave,d.perfil_alimento,d.estado AS donacion_estado,
   d.fecha_limite_aprovechamiento_declarada,d.requiere_cadena_frio,d.conservacion_declarada,d.temperatura_declarada,d.envase,
-  to_jsonb(d) AS donacion,
+  to_jsonb(d)||jsonb_build_object('fotos',${photosSQL('d')}) AS donacion,${photosSQL('d')} AS fotos,
   (SELECT count(*)::int FROM incidencia i WHERE i.id_seguimiento=t.id_seguimiento AND i.estado='abierta') AS incidencias_abiertas,
   (SELECT count(*)::int FROM incidencia i WHERE i.id_seguimiento=t.id_seguimiento AND i.estado='abierta' AND i.severidad='alta') AS incidencias_criticas,
   (SELECT to_jsonb(h) FROM hito_custodia h WHERE h.id_seguimiento=t.id_seguimiento ORDER BY h.fecha_evento DESC,h.id_hito DESC LIMIT 1) AS ultimo_hito,

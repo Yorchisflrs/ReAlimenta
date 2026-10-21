@@ -1,0 +1,117 @@
+{
+  "ejecucion": "mvigxbnk-nuevas",
+  "fecha_inicio": "2026-10-21T18:51:22.828Z",
+  "navegador": "Chrome del sistema mediante Playwright",
+  "pruebas": [
+    {
+      "nombre": "Foto propia: valida SVG, muestra vista previa y persiste imagen real tras recargar",
+      "estado": "passed",
+      "duracion_ms": 4433,
+      "error": null
+    },
+    {
+      "nombre": "Recuperación demostrativa: código visible, confirmación y acceso con contraseña nueva de cuenta aislada",
+      "estado": "passed",
+      "duracion_ms": 4775,
+      "error": null
+    },
+    {
+      "nombre": "Responsive nuevo: login, recuperación y formulario con fotografía sin desbordamiento a 360 px",
+      "estado": "passed",
+      "duracion_ms": 4459,
+      "error": null
+    },
+    {
+      "nombre": "Cinco fondos locales: recursos reales, degradados y fotografía de pan íntegra en vistas del donante",
+      "estado": "passed",
+      "duracion_ms": 3630,
+      "error": null
+    }
+  ],
+  "registros_creados": [
+    {
+      "id_donacion": 43,
+      "alimento": "Prueba UI mvigxbnk-nuevas foto propia"
+    }
+  ],
+  "errores_javascript": [],
+  "peticiones_simuladas": false,
+  "foto_propia": {
+    "id_donacion": 43,
+    "url": "/media/donaciones/43992b996c9508cec3fc1924e419442942cb6fc5.webp",
+    "bytes_originales_seleccionados": 260209,
+    "bytes_webp": 218908,
+    "persistencia_recarga": true,
+    "svg_rechazado_cliente": true,
+    "svg_rechazado_api": 415
+  },
+  "fecha_fin": "2026-10-21T18:51:41.126Z",
+  "recuperacion": {
+    "cuenta_aislada": "recovery.ui@realimenta.test",
+    "codigo_demo_visible": true,
+    "contrasena_actualizada": true,
+    "login_comprobado": true,
+    "cuentas_principales_modificadas": false
+  },
+  "responsive": {
+    "ancho": 360,
+    "login": {
+      "viewport": 360,
+      "document": 360,
+      "body": 360
+    },
+    "recuperacion": {
+      "viewport": 360,
+      "document": 360,
+      "body": 360
+    },
+    "formulario": {
+      "viewport": 360,
+      "document": 360,
+      "body": 360
+    }
+  },
+  "fondos": {
+    "recursos": [
+      {
+        "archivo": "feria-gastronomica-puno.jpeg",
+        "estado": 200,
+        "bytes": 56510
+      },
+      {
+        "archivo": "trucha-plato-andino.jpeg",
+        "estado": 200,
+        "bytes": 24528
+      },
+      {
+        "archivo": "plato-tradicional-andino.png",
+        "estado": 200,
+        "bytes": 250507
+      },
+      {
+        "archivo": "pan-artesanal-marca-original.jpeg",
+        "estado": 200,
+        "bytes": 302968
+      },
+      {
+        "archivo": "quesos-artesanales.jpeg",
+        "estado": 200,
+        "bytes": 43841
+      }
+    ],
+    "vistas": [
+      "dashboard",
+      "mis-donaciones",
+      "solicitudes",
+      "seguimiento",
+      "nueva-donacion"
+    ],
+    "pan_sin_recorte": true,
+    "marca_original_conservada_css": true,
+    "movil": {
+      "viewport": 360,
+      "document": 360,
+      "body": 360
+    }
+  }
+}

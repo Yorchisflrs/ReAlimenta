@@ -67,8 +67,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   function setContent(html, title) {
     window.REAMaps?.dispose(main);
+    window.REAImages?.dispose(main);
     picker?.destroy?.(); picker = null;
     main.innerHTML = html;
+    window.REAAmbience?.apply(state.current,role);
     window.REAPresentation?.enhance(main,state);
     $('[data-breadcrumb]').textContent = title;
     document.title = `${title} | REAlimenta`;
@@ -314,12 +316,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (form.id === 'route-form') { await evaluateRoute(form); return; }
       if (form.id === 'donation-form') {
         const values = Object.fromEntries(new FormData(form));
+        delete values.foto;
         const body = { ...values, cantidad: Number(values.cantidad), latitud_recojo: Number(values.latitud_recojo), longitud_recojo: Number(values.longitud_recojo), requiere_cadena_frio: form.requiere_cadena_frio.checked, ubicacion_confirmada: form.ubicacion_confirmada.checked };
         for (const field of ['fecha_disponibilidad', 'fecha_limite_recojo', 'fecha_limite_aprovechamiento_declarada']) body[field] = values[field] ? new Date(`${values[field]}:00-05:00`).toISOString() : null;
         if (new Date(body.fecha_disponibilidad) >= new Date(body.fecha_limite_recojo)) throw new Error('El límite de recojo debe ser posterior a la disponibilidad.');
         if (body.fecha_limite_aprovechamiento_declarada && new Date(body.fecha_limite_aprovechamiento_declarada) < new Date(body.fecha_limite_recojo)) throw new Error('El límite de aprovechamiento declarado no puede ser anterior al límite de recojo.');
         const id = form.dataset.id;
         const result = await REA.request(`/api/donaciones${id ? `/${id}` : ''}`, { method: id ? 'PATCH' : 'POST', body });
+        form.dataset.id=result.data.id_donacion;
+        try{await REAImages.upload(result.data.id_donacion,form);}catch(photoError){throw new Error(`La donación #${result.data.id_donacion} ya está guardada, pero faltó subir una foto: ${photoError.message} Puedes reintentar guardar sin crear otra donación.`);}
         await loadData();
         toast(id ? 'Cambios guardados en tu donación.' : 'Tu donación ya está publicada.');
         await navigate('detalle', { id: result.data.id_donacion });

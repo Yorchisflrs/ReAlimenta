@@ -20,6 +20,8 @@ Los cinco escenarios de muestra están identificados como ficticios:
 
 Los colores se calculan con el reloj y condiciones actuales, no son valores fijos asociados al nombre del ejemplo. El escenario de salsa utiliza disponibilidad prevista a las 12:55 y plazo declarado a las 13:55, hora de Lima del día de preparación. Al transcurrir la ventana, puede pasar a rojo. Las rutas públicas no implican que esas instituciones donen o reciban alimentos.
 
+Para una exposición fuera de esa ventana, `npm run demo:vigente` crea el escenario adicional Salsa de tomate coordinación inmediata con un plazo específico de 70 minutos a partir del momento de ejecución. Reutiliza un ejemplo todavía vigente o crea uno nuevo; no renueva fechas ni cambia hitos de lotes anteriores. Permite comparar amarillo con el escenario de demora de 180 minutos que produce rojo. Los 70 minutos son un parámetro didáctico, no una recomendación de vida útil ni una garantía de consumo.
+
 ## Estados y responsabilidades
 
 Preparación → listo para recojo → recogido → en traslado → entrega registrada → recepción confirmada.
