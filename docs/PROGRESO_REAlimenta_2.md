@@ -13,7 +13,7 @@ Fecha de inicio: 20 de octubre de 2026.
 | Evaluación temporal | Cálculo backend y estados verde, amarillo, rojo y gris probados |
 | Rediseño | Portada y paneles; prueba móvil 360 px sin desbordamiento |
 | Documentación RNF y módulos | Markdown y Word RNF; API, módulos, configuración y evidencias |
-| Pruebas y demostración | 23/23 API/PG/unidad + 4/4 navegador, sin fallos |
+| Pruebas y demostración | 32/32 API/PG/unidad (incluye custodia) + pruebas de navegador, sin fallos |
 
 Actualización final: 21 de octubre de 2026. Ver `evidencias/ui-resumen.json` y `evidencias/pruebas-unitarias-integracion.tap`.
 

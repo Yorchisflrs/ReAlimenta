@@ -1,0 +1,202 @@
+TAP version 13
+# Subtest: API y PostgreSQL real responden con fecha del servidor
+ok 1 - API y PostgreSQL real responden con fecha del servidor
+  ---
+  duration_ms: 1844.0949
+  type: 'test'
+  ...
+# Subtest: Custodia: aceptación crea seguimiento con instantáneas, permisos y secuencia sin saltos
+ok 2 - Custodia: aceptación crea seguimiento con instantáneas, permisos y secuencia sin saltos
+  ---
+  duration_ms: 95.7446
+  type: 'test'
+  ...
+# Subtest: Custodia: transferencias requieren responsables, concurrencia protegida y recepción completa
+ok 3 - Custodia: transferencias requieren responsables, concurrencia protegida y recepción completa
+  ---
+  duration_ms: 206.4666
+  type: 'test'
+  ...
+# Subtest: Incidencias: acceso por participante, no conformidad automática y resolución solo administrativa
+ok 4 - Incidencias: acceso por participante, no conformidad automática y resolución solo administrativa
+  ---
+  duration_ms: 66.8736
+  type: 'test'
+  ...
+# Subtest: Presentación: ocultar registros técnicos conserva detalle y excluye catálogo y seguimiento
+ok 5 - Presentación: ocultar registros técnicos conserva detalle y excluye catálogo y seguimiento
+  ---
+  duration_ms: 27.9051
+  type: 'test'
+  ...
+# Subtest: Custodia: una incidencia crítica abierta impide confirmar recepción y conserva el historial
+ok 6 - Custodia: una incidencia crítica abierta impide confirmar recepción y conserva el historial
+  ---
+  duration_ms: 72.2138
+  type: 'test'
+  ...
+# Subtest: Autenticación: hash scrypt, cookie protegida, rol, error y cierre de sesión
+ok 7 - Autenticación: hash scrypt, cookie protegida, rol, error y cierre de sesión
+  ---
+  duration_ms: 93.1397
+  type: 'test'
+  ...
+# Subtest: Seguridad: autenticación, roles, CSRF, Origin, páginas y archivos privados
+ok 8 - Seguridad: autenticación, roles, CSRF, Origin, páginas y archivos privados
+  ---
+  duration_ms: 20.9358
+  type: 'test'
+  ...
+# Subtest: Registro público: administrador prohibido, perfil pendiente y datos geográficos persistentes
+ok 9 - Registro público: administrador prohibido, perfil pendiente y datos geográficos persistentes
+  ---
+  duration_ms: 136.454
+  type: 'test'
+  ...
+# Subtest: Donaciones: creación, consulta, filtro, detalle, edición y cancelación persistentes
+ok 10 - Donaciones: creación, consulta, filtro, detalle, edición y cancelación persistentes
+  ---
+  duration_ms: 47.2437
+  type: 'test'
+  ...
+# Subtest: Donaciones: cantidad, cronología, coordenadas y obligatorios inválidos producen 422 comprensible
+ok 11 - Donaciones: cantidad, cronología, coordenadas y obligatorios inválidos producen 422 comprensible
+  ---
+  duration_ms: 21.2517
+  type: 'test'
+  ...
+# Subtest: Propiedad: otro donante no puede leer, editar, cancelar ni aceptar donaciones ajenas
+ok 12 - Propiedad: otro donante no puede leer, editar, cancelar ni aceptar donaciones ajenas
+  ---
+  duration_ms: 113.1121
+  type: 'test'
+  ...
+# Subtest: Solicitudes: creación, persistencia, datos anidados, duplicado y bloqueo de edición
+ok 13 - Solicitudes: creación, persistencia, datos anidados, duplicado y bloqueo de edición
+  ---
+  duration_ms: 32.9314
+  type: 'test'
+  ...
+# Subtest: Solicitudes: rechazo, cancelación con propietario y reenvío permitido
+ok 14 - Solicitudes: rechazo, cancelación con propietario y reenvío permitido
+  ---
+  duration_ms: 25.5886
+  type: 'test'
+  ...
+# Subtest: Aceptación transaccional única: dos decisiones simultáneas, auto-rechazo y auditoría
+ok 15 - Aceptación transaccional única: dos decisiones simultáneas, auto-rechazo y auditoría
+  ---
+  duration_ms: 36.3424
+  type: 'test'
+  ...
+# Subtest: Vencimiento real del servidor impide nuevas solicitudes y registra historial
+ok 16 - Vencimiento real del servidor impide nuevas solicitudes y registra historial
+  ---
+  duration_ms: 23.3601
+  type: 'test'
+  ...
+# Subtest: Integridad referencial de PostgreSQL rechaza solicitud huérfana
+ok 17 - Integridad referencial de PostgreSQL rechaza solicitud huérfana
+  ---
+  duration_ms: 1.4184
+  type: 'test'
+  ...
+# Subtest: Sesiones y donaciones persisten al reiniciar instancia de aplicación; contenido XSS permanece texto JSON
+ok 18 - Sesiones y donaciones persisten al reiniciar instancia de aplicación; contenido XSS permanece texto JSON
+  ---
+  duration_ms: 97.2699
+  type: 'test'
+  ...
+# Subtest: Persistencia de donaciones y sesiones después de detener y reiniciar un proceso Node real
+ok 19 - Persistencia de donaciones y sesiones después de detener y reiniciar un proceso Node real
+  ---
+  duration_ms: 721.8918
+  type: 'test'
+  ...
+# Subtest: Auditoría respeta acceso por actor, donante propietario y administrador
+ok 20 - Auditoría respeta acceso por actor, donante propietario y administrador
+  ---
+  duration_ms: 25.4392
+  type: 'test'
+  ...
+# Subtest: Verde: cálculo temporal de backend suma preparación, recojo, carretera, entrega y margen
+ok 21 - Verde: cálculo temporal de backend suma preparación, recojo, carretera, entrega y margen
+  ---
+  duration_ms: 1.5314
+  type: 'test'
+  ...
+# Subtest: Amarillo: margen positivo menor al umbral configurable
+ok 22 - Amarillo: margen positivo menor al umbral configurable
+  ---
+  duration_ms: 0.2579
+  type: 'test'
+  ...
+# Subtest: Rojo: tiempo total igual al disponible no es viable
+ok 23 - Rojo: tiempo total igual al disponible no es viable
+  ---
+  duration_ms: 0.2045
+  type: 'test'
+  ...
+# Subtest: Gris: falta fecha o ruta y nunca inventa duración
+ok 24 - Gris: falta fecha o ruta y nunca inventa duración
+  ---
+  duration_ms: 0.1776
+  type: 'test'
+  ...
+# Subtest: Cadena de frío declarada sin medios produce rojo; sin declaración produce gris
+ok 25 - Cadena de frío declarada sin medios produce rojo; sin declaración produce gris
+  ---
+  duration_ms: 0.3078
+  type: 'test'
+  ...
+# Subtest: Ventana futura y fecha de recojo también cuentan
+ok 26 - Ventana futura y fecha de recojo también cuentan
+  ---
+  duration_ms: 0.2129
+  type: 'test'
+  ...
+# Subtest: Coordenadas inválidas y tiempos negativos se rechazan
+ok 27 - Coordenadas inválidas y tiempos negativos se rechazan
+  ---
+  duration_ms: 0.607
+  type: 'test'
+  ...
+# Subtest: Un plazo declarado de una hora nunca permite un traslado estimado de tres horas
+ok 28 - Un plazo declarado de una hora nunca permite un traslado estimado de tres horas
+  ---
+  duration_ms: 0.2111
+  type: 'test'
+  ...
+# Subtest: El escenario de tráfico suma demora manual sin presentarse como tráfico vivo
+ok 29 - El escenario de tráfico suma demora manual sin presentarse como tráfico vivo
+  ---
+  duration_ms: 0.374
+  type: 'test'
+  ...
+# Subtest: Tras el recojo no se vuelve a contar preparación ni se rechaza una ventana de recojo ya cumplida
+ok 30 - Tras el recojo no se vuelve a contar preparación ni se rechaza una ventana de recojo ya cumplida
+  ---
+  duration_ms: 0.4079
+  type: 'test'
+  ...
+# Subtest: Una incidencia crítica o condición no conforme prevalece sobre margen suficiente
+ok 31 - Una incidencia crítica o condición no conforme prevalece sobre margen suficiente
+  ---
+  duration_ms: 0.3446
+  type: 'test'
+  ...
+# Subtest: Fallo externo y NoRoute no generan distancia ni duración ficticia
+ok 32 - Fallo externo y NoRoute no generan distancia ni duración ficticia
+  ---
+  duration_ms: 2271.2486
+  type: 'test'
+  ...
+1..32
+# tests 32
+# suites 0
+# pass 32
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4005.7855
