@@ -1,4 +1,5 @@
 import { fail } from './errors.js';
+import { composeAddress, FOOD_PROFILES } from './mappers.js';
 
 export function text(value, field, min = 1, max = 300) {
   if (typeof value !== 'string' || value.trim().length < min || value.trim().length > max)
@@ -26,56 +27,63 @@ export function date(value, field, optional = false) {
 }
 export function id(value) {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) fail(400, 'INVALID_ID', 'El identificador no es válido.');
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > 2147483647) fail(400, 'INVALID_ID', 'El identificador no es válido.');
   return parsed;
 }
 export function coordinates(input, lat = 'latitud', lon = 'longitud') {
   return { [lat]: number(input[lat], lat, -90, 90), [lon]: number(input[lon], lon, -180, 180) };
 }
 
+// Devuelve las columnas de donantes u organizaciones (MySQL) listas para guardar.
 export function profileInput(body, role) {
   const data = body.perfil || body;
+  const direccion = text(data.direccion, 'dirección', 5, 255);
+  const referencia = optionalText(data.referencia, 'referencia', 200);
+  const fullAddress = composeAddress(direccion, referencia);
+  if (fullAddress.length > 255) fail(422, 'VALIDATION_ERROR', 'Revise el campo referencia.', { referencia: 'La dirección y la referencia juntas no pueden superar 255 caracteres.' });
   const result = {
     departamento: text(data.departamento || 'Puno', 'departamento', 2, 100),
     provincia: text(data.provincia || 'Puno', 'provincia', 2, 100),
     distrito: text(data.distrito, 'distrito', 2, 100),
-    direccion: text(data.direccion, 'dirección', 5, 300),
-    referencia: optionalText(data.referencia, 'referencia', 300),
+    direccion: fullAddress,
     ...coordinates(data),
-    ubicacion_confirmada: bool(data.ubicacion_confirmada, 'ubicacion_confirmada')
+    responsable: text(data.responsable || body.nombre, 'responsable', 2, 150)
   };
-  if (!result.ubicacion_confirmada) fail(422, 'LOCATION_UNCONFIRMED', 'Confirme la ubicación en el mapa antes de guardarla.');
-  if (role === 'donante') result.nombre_establecimiento = text(data.nombre_establecimiento, 'nombre del establecimiento', 2, 180);
-  else {
-    result.nombre = text(data.nombre || body.nombre, 'nombre de la organización', 2, 180);
-    result.responsable = text(data.responsable || body.nombre, 'responsable', 2, 160);
-  }
+  if (!bool(data.ubicacion_confirmada, 'ubicacion_confirmada')) fail(422, 'LOCATION_UNCONFIRMED', 'Confirme la ubicación en el mapa antes de guardarla.');
+  if (role === 'donante') result.nombre_establecimiento = text(data.nombre_establecimiento, 'nombre del establecimiento', 2, 200);
+  else result.nombre = text(data.nombre || body.nombre, 'nombre de la organización', 2, 200);
   return result;
 }
 
+// cantidad es decimal(12,2) en MySQL.
+function quantity(value) {
+  const rounded = Math.round(number(value, 'cantidad', 0.01, 9999999999.99) * 100) / 100;
+  if (rounded < 0.01) fail(422, 'VALIDATION_ERROR', 'cantidad debe estar entre 0.01 y 9999999999.99.');
+  return rounded;
+}
+
+// Valida con los nombres del formulario; los límites corresponden a las columnas de donaciones.
 export function donationInput(body) {
-  const image = optionalText(body.imagen_clave, 'imagen del alimento', 40);
   const foodProfile = body.perfil_alimento || 'general';
-  if (!['','pan','fruta','verduras','yogur','arroz','sopa','salsa','galletas','leche','ensalada'].includes(image)) fail(422, 'IMAGE_INVALID', 'Seleccione una de las fotografías disponibles.');
-  if (!['general','panaderia','frutas','hortalizas','preparado','refrigerado','seco'].includes(foodProfile)) fail(422, 'FOOD_PROFILE_INVALID', 'Seleccione un tipo de alimento válido.');
+  if (!FOOD_PROFILES.includes(foodProfile)) fail(422, 'FOOD_PROFILE_INVALID', 'Seleccione un tipo de alimento válido.');
   const value = {
-    imagen_clave: image,
     perfil_alimento: foodProfile,
-    alimento: text(body.alimento, 'alimento', 2, 180),
+    alimento: text(body.alimento, 'alimento', 2, 200),
     categoria: text(body.categoria, 'categoría', 2, 100),
-    cantidad: number(body.cantidad, 'cantidad', 0.001, 999999999),
-    unidad: text(body.unidad, 'unidad', 1, 40),
+    cantidad: quantity(body.cantidad),
+    unidad: text(body.unidad, 'unidad', 1, 50),
     descripcion: optionalText(body.descripcion, 'descripción'),
     fecha_disponibilidad: date(body.fecha_disponibilidad, 'fecha de disponibilidad'),
     fecha_limite_recojo: date(body.fecha_limite_recojo, 'fecha límite de recojo'),
     fecha_limite_aprovechamiento_declarada: date(body.fecha_limite_aprovechamiento_declarada, 'fecha límite de aprovechamiento declarada', true),
-    direccion_recojo: text(body.direccion_recojo, 'dirección de recojo', 5, 300),
+    direccion_recojo: text(body.direccion_recojo, 'dirección de recojo', 5, 255),
     distrito: text(body.distrito, 'distrito', 2, 100),
+    referencia: optionalText(body.referencia, 'referencia', 300),
     ...coordinates(body, 'latitud_recojo', 'longitud_recojo'),
-    conservacion_declarada: text(body.conservacion_declarada, 'conservación declarada', 3, 1000),
+    conservacion_declarada: text(body.conservacion_declarada, 'conservación declarada', 3, 100),
     requiere_cadena_frio: bool(body.requiere_cadena_frio, 'requiere_cadena_frio'),
-    temperatura_declarada: optionalText(body.temperatura_declarada, 'temperatura declarada', 100),
-    envase: text(body.envase, 'envase', 2, 300),
+    temperatura_declarada: optionalText(body.temperatura_declarada, 'temperatura declarada', 50),
+    envase: text(body.envase, 'envase', 2, 100),
     observaciones: optionalText(body.observaciones, 'observaciones')
   };
   const available = Date.parse(value.fecha_disponibilidad), pickup = Date.parse(value.fecha_limite_recojo);

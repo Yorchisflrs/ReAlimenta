@@ -31,7 +31,7 @@
     return session;
   }
   async function uploadPhoto(donationId,file){
-    const response=await fetch(`/api/donaciones/${Number(donationId)}/foto`,{method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':file.type,'x-csrf-token':csrfToken,'x-file-name':encodeURIComponent(file.name)},body:file});
+    const response=await fetch(`/api/donaciones/${Number(donationId)}/foto`,{method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':window.REAImages?.mimeOf?.(file)||file.type,'x-csrf-token':csrfToken,'x-file-name':encodeURIComponent(file.name)},body:file});
     const data=await response.json().catch(()=>({}));
     if(!response.ok){const error=new Error(data.error?.message||'No se pudo subir la fotografía.');error.status=response.status;error.code=data.error?.code;throw error;}
     return data;

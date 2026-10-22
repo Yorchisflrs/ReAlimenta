@@ -1,8 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import path from 'node:path';
 
-const output = new URL('../docs/evidencias/', import.meta.url);
+const output = process.env.UI_EVIDENCE_DIR
+  ? pathToFileURL(`${path.resolve(process.env.UI_EVIDENCE_DIR)}${path.sep}`)
+  : new URL('../docs/evidencias/', import.meta.url);
 const run = `${process.env.REALIMENTA_UI_RUN_ID || Date.now().toString(36)}-nuevas`;
 const recoveryEmail = 'recovery.ui@realimenta.test';
 const recoveryPassword = 'RecuperadaUi2026!';
@@ -105,7 +108,7 @@ test('Foto propia: valida SVG, muestra vista previa y persiste imagen real tras 
   const media = await page.request.get(source);
   expect(media.status()).toBe(200);
   expect(media.headers()['content-type']).toMatch(/^image\/webp/);
-  expect(source).toMatch(/\/media\/donaciones\/[a-f0-9]{40}\.webp$/);
+  expect(source).toMatch(/\/media\/donaciones\/donacion_\d+_[a-f0-9]{16}\.webp$/);
   summary.foto_propia = { id_donacion: donation.id_donacion, url: source, bytes_originales_seleccionados: selectedFileBytes, bytes_webp: (await media.body()).length, persistencia_recarga: true, svg_rechazado_cliente: true };
 
   const session = (await (await page.request.get('/api/auth/me')).json());
@@ -167,13 +170,11 @@ test('Responsive nuevo: login, recuperación y formulario con fotografía sin de
   expect(summary.errores_javascript).toEqual([]);
 });
 
-test('Cinco fondos locales: recursos reales, degradados y fotografía de pan íntegra en vistas del donante', async ({ page }) => {
+test('Tres fondos nuevos: productos locales, degradados y ambientación persistente por vista', async ({ page }) => {
   const assets = [
-    'feria-gastronomica-puno.jpeg',
-    'trucha-plato-andino.jpeg',
-    'plato-tradicional-andino.png',
-    'pan-artesanal-marca-original.jpeg',
-    'quesos-artesanales.jpeg'
+    'entrega-productos-locales-v2.png',
+    'pan-queso-local-v2.png',
+    'cosecha-andina-v2.png'
   ];
   const resources = [];
   for (const asset of assets) {
@@ -183,25 +184,26 @@ test('Cinco fondos locales: recursos reales, degradados y fotografía de pan ín
     resources.push({ archivo: asset, estado: response.status(), bytes: (await response.body()).length });
   }
   await login(page);
-  await expect(page.locator('body')).toHaveAttribute('data-ambient', 'feria');
+  await expect(page.locator('body')).toHaveAttribute('data-ambient', 'comunidad');
   const header = page.locator('.mvp-page-header.has-ambience');
-  await expect(header.locator('.ambience-header-photo[data-ambient-image="feria"]')).toBeVisible();
+  await expect(header.locator('.ambience-header-photo[data-ambient-image="comunidad"]')).toBeVisible();
   expect(await header.evaluate(element => getComputedStyle(element).backgroundImage)).toContain('linear-gradient');
   await page.screenshot({ path: fileURLToPath(new URL('fondos-donante.png', output)) });
-  const views = [['mis-donaciones', 'quesos'], ['solicitudes', 'plato'], ['seguimiento', 'trucha'], ['nueva-donacion', 'pan']];
+  expect(await page.locator('.app-main').evaluate(element=>getComputedStyle(element).backgroundImage)).toContain('entrega-productos-locales-v2.png');
+  const views = [['mis-donaciones', 'pan'], ['solicitudes', 'comunidad'], ['seguimiento', 'cosecha'], ['nueva-donacion', 'pan']];
   for (const [view, image] of views) {
     await page.locator(`.sidebar-nav [data-view="${view}"]`).click();
     await expect(page.locator('body')).toHaveAttribute('data-ambient', image);
     await expect(page.locator(`.ambience-header-photo[data-ambient-image="${image}"]`)).toBeVisible();
   }
   const bread = page.locator('.ambience-header-photo[data-ambient-image="pan"]');
-  expect(await bread.evaluate(element => getComputedStyle(element).backgroundSize)).toBe('contain');
-  expect(await bread.evaluate(element => getComputedStyle(element, '::after').display)).toBe('none');
-  await expect(page.locator('.ambience-original-caption')).toContainText(/marca de agua original conservada/i);
+  expect(await bread.evaluate(element => getComputedStyle(element).backgroundSize)).toBe('cover');
+  expect(await bread.evaluate(element => getComputedStyle(element, '::after').backgroundImage)).toContain('linear-gradient');
+  await expect(page.locator('.ambience-original-caption')).toHaveCount(0);
   await page.screenshot({ path: fileURLToPath(new URL('fondo-pan-integro.png', output)) });
   await page.setViewportSize({ width: 360, height: 800 });
   const mobile = await noOverflow(page);
   await page.screenshot({ path: fileURLToPath(new URL('fondo-pan-movil.png', output)) });
-  summary.fondos = { recursos: resources, vistas: ['dashboard', ...views.map(([view]) => view)], pan_sin_recorte: true, marca_original_conservada_css: true, movil: mobile };
+  summary.fondos = { recursos: resources, vistas: ['dashboard', ...views.map(([view]) => view)], imagenes_nuevas_generadas: true, fondos_degradados: true, movil: mobile };
   expect(summary.errores_javascript).toEqual([]);
 });

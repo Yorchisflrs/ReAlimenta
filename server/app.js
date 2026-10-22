@@ -2,7 +2,9 @@ import express from 'express';
 import helmet from 'helmet';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pool } from './db.js';
+import { db, pool } from './db.js';
+import { config } from './config.js';
+import { inspectSchema } from './schema.js';
 import { authRouter, loadSession, checkOrigin, csrf, requireAuth, requireRole } from './auth.js';
 import { businessRouter, getStats } from './business.js';
 import { errorHandler } from './errors.js';
@@ -39,15 +41,32 @@ export function createApp() {
   app.use('/api', checkOrigin);
   app.get('/api/health', async (req, res) => {
     try {
-      const row = (await pool.query('SELECT current_database() AS database,now() AS server_time')).rows[0];
-      res.json({ data: { status: 'ok', postgres: true, database: row.database, server_time: row.server_time, timezone: 'America/Lima' } });
-    } catch { res.status(503).json({ error: { code: 'DATABASE_UNAVAILABLE', message: 'No se pudo conectar con PostgreSQL.' } }); }
+      const row = (await db.query('SELECT DATABASE() AS base_de_datos, NOW() AS server_time')).rows[0];
+      res.json({ data: { status: 'ok', mysql: true, ...(config.production ? {} : { database: row.base_de_datos }), server_time: row.server_time, timezone: 'America/Lima' } });
+    } catch (error) {
+      console.error('Prueba de salud MySQL fallida:', error.code || error.message);
+      res.status(503).json({ error: { code: 'DATABASE_UNAVAILABLE', message: 'No se pudo conectar con la base de datos MySQL.' } });
+    }
+  });
+  // Prueba de conexión solo para desarrollo: no revela contraseña, usuario ni versión del servidor.
+  if (!config.production) app.get('/api/dev/conexion', async (req, res) => {
+    try {
+      const schema = await inspectSchema(db);
+      res.status(schema.ok ? 200 : 500).json({ data: {
+        message: schema.ok ? 'Conexión a MySQL establecida correctamente' : 'Conexión a MySQL establecida, pero faltan tablas o columnas esperadas.',
+        base_de_datos: config.database.name, tablas_esperadas: schema.tablasEsperadas, tablas_encontradas: schema.tablasEncontradas,
+        tablas_faltantes: schema.tablasFaltantes, columnas_faltantes: schema.columnasFaltantes
+      } });
+    } catch (error) {
+      console.error('Prueba de conexión MySQL fallida:', error.code || error.message);
+      res.status(503).json({ error: { code: 'DATABASE_UNAVAILABLE', message: 'No se pudo establecer la conexión con MySQL. Revise que MySQL esté iniciado en XAMPP y la configuración de .env.' } });
+    }
   });
   app.get('/api/public/stats', async (req, res) => res.json({ data: await getStats() }));
   app.use('/api', loadSession, csrf);
   app.use('/api/auth', authRouter);
   app.use('/api/auth', recoveryRouter);
-  app.use('/api', createLogisticsRouter({ pool, requireAuth, requireRole, csrf }));
+  app.use('/api', createLogisticsRouter({ db, requireAuth }));
   app.use('/api', photoRouter);
   app.use('/api', custodyRouter);
   app.use('/api', businessRouter);

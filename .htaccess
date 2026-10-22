@@ -1,0 +1,21 @@
+# REAlimenta se ejecuta con Node.js (npm start) en http://127.0.0.1:3000; Apache de XAMPP no es su servidor.
+# Como el proyecto está dentro de htdocs, este archivo impide que Apache publique la configuración (.env),
+# el código del servidor, la estructura de la base, las pruebas, las dependencias o las fotografías privadas.
+Options -Indexes
+
+# Sin mod_rewrite no se pueden aplicar las reglas: se bloquea todo el proyecto (falla de forma segura).
+<IfModule !mod_rewrite.c>
+  Require all denied
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Archivos y carpetas ocultos: .env, .git, .local, .venv, .htaccess...
+  RewriteRule (^|/)\. - [F,L]
+  RewriteRule ^(server|db|scripts|tests|node_modules|uploads|tmp|test-results)(/|$) - [F,L,NC]
+  RewriteRule ^(package(-lock)?\.json|playwright\.config\.js)$ - [F,L,NC]
+  # Las páginas funcionan desde Node, que atiende la API, las sesiones y las fotografías.
+  # Si cambia PORT en .env, actualice también estas dos redirecciones.
+  RewriteRule ^(index\.html)?$ http://127.0.0.1:3000/ [R=302,L]
+  RewriteRule ^(login|registro|recuperar|donante|organizacion|administrador)\.html$ http://127.0.0.1:3000/$1.html [R=302,L,NC]
+</IfModule>

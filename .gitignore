@@ -9,3 +9,7 @@ test-results/
 playwright-report/
 *.log
 ~$*
+
+# Fotografías subidas por los donantes (se conservan la carpeta y su protección .htaccess).
+uploads/donaciones/*
+!uploads/donaciones/.gitkeep

@@ -10,7 +10,14 @@
     const s=`${d.alimento||''} ${d.categoria||''}`.toLocaleLowerCase('es');
     return /galleta/.test(s)?'galletas':/pan/.test(s)?'pan':/yogu/.test(s)?'yogur':/leche|lácte/.test(s)?'leche':/arroz|abarrote/.test(s)?'arroz':/salsa|tomate/.test(s)?'salsa':/ensalada/.test(s)?'ensalada':/crema|sopa|preparad/.test(s)?'sopa':/verd|hortal/.test(s)?'verduras':'fruta';
   }
-  function photo(d){const url=d.fotos?.[0]?.url;return typeof url==='string'&&/^\/media\/donaciones\/[a-f0-9]{40}\.webp$/.test(url)?url:`assets/images/alimentos/${key(d)}.jpg`;}
+  function photo(d){
+    const url=d.fotos?.[0]?.url;
+    if(typeof url==='string'&&/^\/media\/donaciones\/donacion_\d+_[a-f0-9]{16}\.webp$/.test(url))return url;
+    const food=`${d.alimento||''} ${d.categoria||''}`.toLocaleLowerCase('es');
+    if(/papa|oca\b|yuca|tubérculo/.test(food))return 'assets/images/fondos/cosecha-andina-v2.png';
+    if(/queso/.test(food))return 'assets/images/fondos/pan-queso-local-v2.png';
+    return `assets/images/alimentos/${key(d)}.jpg`;
+  }
   function decorate(root,state){
     root.querySelectorAll('.mvp-donation-card').forEach(card=>{
       if(card.dataset.photographed)return;
@@ -43,11 +50,23 @@
       } else badge.innerHTML='<span></span>Abre la ruta para evaluar este traslado';
       const mini=document.createElement('small');mini.className='declared-deadline';mini.textContent='Tiempo hasta el límite declarado; no garantiza aptitud de consumo.';body.querySelector('.card-time').after(mini);
     });
+    root.querySelectorAll('.mvp-request-card').forEach(card=>{
+      const id=card.querySelector('[data-action="request-detail"]')?.dataset.id;
+      const request=state.requests.find(r=>String(r.id_solicitud)===id);
+      if(!request?.id_seguimiento||card.querySelector('[data-presentation-tracking]'))return;
+      const link=document.createElement('button');link.type='button';link.className='btn btn-primary';link.dataset.presentationTracking=request.id_seguimiento;link.innerHTML='<i class="fa-solid fa-route"></i> Abrir seguimiento y custodia';card.querySelector('.request-card-actions').append(link);
+    });
   }
   function comparison(result){
     if(!result?.ruta)return '';
     const base=Number(result.ruta.duracion_estimada_min),extra=Number(result.evaluacion?.demora_trafico_min||0);
     return `<div class="traffic-comparison"><div><span><i class="fa-solid fa-road"></i> Ruta base</span><strong>${num(base)} <small>min</small></strong><p>Estimación del proveedor</p></div><div><span><i class="fa-solid fa-car-side"></i> Con demora elegida</span><strong>${num(base+extra)} <small>min</small></strong><p>Base + ${num(extra)} min de escenario</p></div><div><span><i class="fa-solid fa-shield-heart"></i> Margen logístico</span><strong>${num(result.evaluacion?.margen_seguridad_min)} <small>min</small></strong><p>Reserva adicional de planificación</p></div></div><p class="traffic-disclaimer">Los escenarios de congestión son supuestos manuales, no mediciones de tráfico en vivo. La duración real puede variar.</p>`;
+  }
+  function journey(result,places={}){
+    if(!result?.ruta)return '';
+    const pickup=result.ruta_recojo,origin=places.origen||result.origen||result.ruta.origen,destination=places.destino||result.destino||result.ruta.destino;
+    const from=origin?.nombre||origin?.direccion||'Establecimiento donante',to=destination?.nombre||destination?.direccion||'Organización receptora';
+    return `<div class="journey-legs"><article class="journey-leg ${!pickup?'completed':''}" data-journey-leg="recojo"><span><i class="fa-solid fa-car-side"></i> 1 · Ir al punto de recojo</span><strong>${pickup?`${num(pickup.distancia_km)} km · ${num(pickup.duracion_estimada_min)} min`:'Recojo ya registrado'}</strong><p>${esc(to)} → ${esc(from)}</p><small>${pickup?'Ida por carretera; se incluye en el tiempo total antes del recojo.':'El viaje de ida ya no se vuelve a sumar.'}</small></article><article class="journey-leg" data-journey-leg="entrega"><span><i class="fa-solid fa-box"></i> 2 · Trasladar los alimentos</span><strong>${num(result.ruta.distancia_km)} km · ${num(result.ruta.duracion_estimada_min)} min</strong><p>${esc(from)} → ${esc(to)}</p><small>Ruta base mostrada en el mapa. La demora elegida se suma a este traslado.</small></article></div>`;
   }
   async function routeForm(root,state){
     const form=root.querySelector('#route-form');if(!form||form.dataset.enhanced)return;
@@ -72,7 +91,8 @@
     const hero=document.createElement('div');hero.className='detail-food-photo';hero.innerHTML=`<img src="${photo(selected)}" alt="${selected.fotos?.length?'Fotografía compartida por el donante':'Fotografía referencial del tipo de alimento'}"><span>${selected.fotos?.length?'Foto del donante':'Fotografía referencial'} · ${esc(profiles[selected.perfil_alimento]||profiles.general)}</span>`;
     root.querySelector('.detail-summary').prepend(hero);
     if(selected.fotos?.length>1){const gallery=document.createElement('div');gallery.className='detail-food-gallery';for(const f of selected.fotos){const img=document.createElement('img');img.src=f.url;img.alt='Fotografía adicional compartida por el donante';gallery.append(img);}hero.after(gallery);}
-    if(selected.plan_ruta&&(!state.selectedRequest||Number(state.selectedRequest.id_organizacion)===Number(selected.plan_ruta.id_organizacion))){ctx.displayRoute(selected.plan_ruta);}
+    const moved=['recogido','en_transito','entregado','confirmado'].includes(selected.cadena_custodia?.estado);
+    if(selected.plan_ruta&&(selected.plan_ruta.ruta_recojo||moved)&&(!state.selectedRequest||Number(state.selectedRequest.id_organizacion)===Number(selected.plan_ruta.id_organizacion))){ctx.displayRoute(selected.plan_ruta);}
     else if(isOrg||state.selectedRequest){
       try{
         const response=await REA.request(`/api/donaciones/${selected.id_donacion}/evaluacion`,{method:'POST',body:{preparacion_min:10,recojo_min:10,entrega_min:5,margen_seguridad_min:15,...(state.selectedRequest?{id_solicitud:state.selectedRequest.id_solicitud}:{})}});
@@ -85,9 +105,8 @@
     form.dataset.enhanced='true';
     const d=form.dataset.id?state.selected:{};
     REAImages.mount(form,d||{});
-    const image=document.createElement('label');image.innerHTML=`Fotografía referencial<select class="form-control" name="imagen_clave"><option value="">Según categoría del alimento</option>${keys.map(k=>`<option value="${k}" ${k===d?.imagen_clave?'selected':''}>${esc(({pan:'Pan artesanal',fruta:'Fruta variada',verduras:'Verduras',yogur:'Yogur',arroz:'Arroz seco',sopa:'Crema de verduras',salsa:'Tomates',galletas:'Galletas',leche:'Leche',ensalada:'Ensalada'})[k])}</option>`).join('')}</select>`;
-    form.querySelector('.form-grid').append(image);
-    const profile=document.createElement('label');profile.innerHTML=`Tipo de alimento<select class="form-control" name="perfil_alimento">${Object.entries(profiles).map(([k,v])=>`<option value="${k}" ${k===d?.perfil_alimento?'selected':''}>${esc(v)}</option>`).join('')}</select>`;image.after(profile);
+    // La tabla donaciones no guarda una foto referencial elegida: se deduce del alimento y la categoría.
+    const profile=document.createElement('label');profile.innerHTML=`Tipo de alimento<select class="form-control" name="perfil_alimento">${Object.entries(profiles).map(([k,v])=>`<option value="${k}" ${k===d?.perfil_alimento?'selected':''}>${esc(v)}</option>`).join('')}</select>`;form.querySelector('.form-grid').append(profile);
     const availability=form.querySelector('[name="fecha_disponibilidad"]');
     const duration=document.createElement('label');duration.className='full';duration.innerHTML='Atajo opcional · plazo declarado desde disponibilidad (min)<input class="form-control" type="number" name="plazo_declarado_min" min="5" max="10080" placeholder="Ej. 60 si el responsable declara una hora"><small class="small-muted">No se asigna duración por categoría. Este atajo completa las fechas; usa un plazo validado para ese lote, su elaboración y conservación.</small>';
     form.querySelector('[name="fecha_limite_aprovechamiento_declarada"]').closest('label').after(duration);
@@ -99,6 +118,6 @@
       if(Date.parse(`${form.fecha_limite_recojo.value}:00-05:00`)>=limit)form.fecha_limite_recojo.value=local(limit-Math.min(5,min/2)*60000);
     });
   }
-  window.REAPresentation={configure(value){ctx=value;},photo,profiles,comparison,decorate,enhance(root,state){decorate(root,state);donationForm(root,state);void routeForm(root,state);}};
+  window.REAPresentation={configure(value){ctx=value;},photo,profiles,comparison,journey,decorate,enhance(root,state){decorate(root,state);donationForm(root,state);void routeForm(root,state);}};
   document.addEventListener('click',event=>{const button=event.target.closest('[data-presentation-tracking]');if(button)REACustody.open(Number(button.dataset.presentationTracking));});
 })();

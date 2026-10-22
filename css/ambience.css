@@ -38,3 +38,67 @@ body[data-ambient] { --ambient-cream:#f8f3e7; --ambient-border:#e7e3d4; }
 @media(max-width:850px) { .mvp-app .mvp-page-header.has-ambience { padding:27px; min-height:220px; } .mvp-page-header.has-ambience>div:not(.ambience-header-photo) { width:65%; } .mvp-page-header.has-ambience h1 { font-size:1.7rem; } .mvp-page-header.has-ambience p { font-size:.71rem; } .mvp-page-header.has-ambience[data-ambient-image="pan"]>div:not(.ambience-header-photo) { width:56%; } .ambience-header-photo[data-ambient-image="pan"] { width:39%; } .registration-layout .ambience-auth-banner { display:block; } }
 @media(max-width:680px) { .mvp-app .mvp-page-header.has-ambience { padding:171px 23px 24px; display:flex; min-height:340px; border-radius:14px; gap:17px; } .mvp-page-header.has-ambience>div:not(.ambience-header-photo),.mvp-page-header.has-ambience[data-ambient-image="pan"]>div:not(.ambience-header-photo) { width:100%; } .mvp-page-header.has-ambience h1 { font-size:1.65rem; line-height:1.2; } .mvp-page-header.has-ambience .section-kicker { font-size:.45rem; } .mvp-page-header.has-ambience p { font-size:.7rem; line-height:1.75; } .ambience-header-photo { inset:0 0 auto; width:100%; height:165px; background-position:center 40%; } .ambience-header-photo::after { background:linear-gradient(0deg,#f8f4e8 0%,#f8f4e8bd 12%,#f8f4e800 47%); } .ambience-header-photo[data-ambient-image="feria"] { background-position:center 38%; } .mvp-page-header.has-ambience[data-ambient-image="pan"] { min-height:410px; padding-top:235px; } .ambience-header-photo[data-ambient-image="pan"] { inset:12px 12px auto; width:calc(100% - 24px); height:194px; background-size:contain; background-position:center; } .ambience-original-caption { font-size:.43rem; bottom:-21px; } .ambience-auth-banner { display:block; height:165px; } .mvp-app[data-ambient="feria"] .mvp-feature-banner { background:linear-gradient(90deg,#dfebd5f2 0%,#dfebd5e6 60%,#dfebd59c 100%),url('../assets/images/fondos/feria-gastronomica-puno.jpeg') right center/cover no-repeat; } .mvp-public[data-ambient] .landing-cta { background-size:cover,auto 100%; } .mvp-public[data-ambient] .landing-responsibility { background-size:cover,auto 50%; background-position:center,right bottom; } }
 @media(prefers-reduced-motion:reduce) { .ambience-header-photo,.ambience-auth-banner { animation:none; } }
+
+/* REAlimenta local: tres escenas nuevas, presentes durante toda la navegación. */
+.mvp-app[data-ambient] .app-main {
+  background-color:#f1f0e3;
+  background-image:linear-gradient(110deg,#f6f5e8ed 12%,#f6f5e8d6 64%,#eee8d4b8),var(--ambient-image);
+  background-position:center,right top;
+  background-size:cover;
+  background-attachment:fixed;
+}
+.mvp-app[data-ambient] .topbar { background:#fffef8ed; backdrop-filter:blur(12px); }
+.mvp-app[data-ambient] .content { width:100%; }
+.mvp-app[data-ambient] .mvp-page-header.has-ambience,
+.mvp-app[data-ambient] .mvp-page-header.has-ambience[data-ambient-image="pan"] {
+  min-height:228px; padding:30px 32px; background:linear-gradient(115deg,#fcf9ec,#f0edda); border-color:#dedfc9;
+}
+.mvp-page-header.has-ambience>div:not(.ambience-header-photo),
+.mvp-page-header.has-ambience[data-ambient-image="pan"]>div:not(.ambience-header-photo) { width:61%; }
+.mvp-app[data-ambient] .ambience-header-photo,
+.mvp-app[data-ambient] .ambience-header-photo[data-ambient-image="pan"] {
+  inset:0 0 0 auto; width:53%; height:auto; background-size:cover; background-position:75% center; border-radius:0;
+}
+.ambience-header-photo::after,
+.ambience-header-photo[data-ambient-image="pan"]::after {
+  display:block; background:linear-gradient(90deg,#f9f5e8 0%,#f9f5e8df 13%,#f9f5e85c 37%,#f9f5e800 70%);
+}
+.mvp-app[data-ambient="comunidad"] .mvp-feature-banner {
+  background:linear-gradient(90deg,#dfebd5 0%,#dfebd5f5 45%,#dfebd547 100%),var(--ambient-image) right center/cover no-repeat;
+}
+.mvp-app[data-ambient="comunidad"] .mvp-feature-banner>.route-illustration { opacity:0; pointer-events:none; }
+.mvp-auth-layout { background-color:#f5f2e4; }
+body[data-ambient] .mvp-auth-main {
+  background:linear-gradient(110deg,#f8f6ecdc,#f8f6ecb8),var(--ambient-image) 75% center/cover;
+}
+body[data-ambient] .mvp-auth-card { padding:30px; background:#fffffff0; border:1px solid #e3e4d2; border-radius:22px; box-shadow:0 18px 55px #4252290e; }
+.mvp-auth-aside.has-ambient-photo { background-position:69% center; }
+.mvp-auth-aside.has-ambient-photo .auth-story { padding-top:90px; }
+.ambience-auth-banner { background-position:75% center; }
+.mvp-public[data-ambient] .landing-cta {
+  background-image:linear-gradient(90deg,#07573ff0,#07573fdf 45%,#07573f78),var(--ambient-image);
+  background-size:cover; background-position:center,right center;
+}
+.mvp-public[data-ambient] .landing-responsibility {
+  background:linear-gradient(90deg,#fcfbf3fa,#fcfbf3f0 60%,#fcfbf3b8),url('../assets/images/fondos/pan-queso-local-v2.png') right center/cover;
+}
+.journey-legs { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:20px 0; }
+.journey-leg { padding:17px 19px; border:1px solid #dce3cc; background:#f7f7eaf5; border-radius:12px; min-width:0; }
+.journey-leg>span { display:block; font-size:.63rem; font-weight:650; color:#446044; }
+.journey-leg>strong { display:block; margin:8px 0; font-size:1.25rem; color:#164e3c; }
+.journey-leg>p,.journey-leg>small { margin:0; font-size:.64rem; color:#627454; line-height:1.7; overflow-wrap:anywhere; }
+.journey-leg.completed { background:#eef4e7; }
+@media(max-width:850px) { body[data-ambient] .mvp-auth-card { padding:24px; } }
+@media(max-width:680px) {
+  .mvp-app[data-ambient] .app-main { background-attachment:scroll; background-size:auto 1150px; background-repeat:repeat-y; }
+  .mvp-app[data-ambient] .mvp-page-header.has-ambience,
+  .mvp-app[data-ambient] .mvp-page-header.has-ambience[data-ambient-image="pan"] { padding:171px 23px 24px; min-height:340px; }
+  .mvp-page-header.has-ambience>div:not(.ambience-header-photo),
+  .mvp-page-header.has-ambience[data-ambient-image="pan"]>div:not(.ambience-header-photo) { width:100%; }
+  .mvp-app[data-ambient] .ambience-header-photo,
+  .mvp-app[data-ambient] .ambience-header-photo[data-ambient-image="pan"] { inset:0 0 auto; width:100%; height:165px; background-position:72% center; }
+  .ambience-header-photo::after,.ambience-header-photo[data-ambient-image="pan"]::after { background:linear-gradient(0deg,#f9f5e8 0%,#f9f5e8aa 16%,#f9f5e800 55%); }
+  body[data-ambient] .mvp-auth-main { padding:22px 17px; }
+  body[data-ambient] .mvp-auth-card { padding:22px 18px; border-radius:17px; }
+  .journey-legs { grid-template-columns:1fr; }
+}

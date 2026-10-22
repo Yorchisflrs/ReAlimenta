@@ -1,0 +1,22 @@
+# Fotografías de donaciones de REAlimenta. Solo se entregan mediante Node (/media/donaciones/...) después
+# de validar la sesión y el permiso del usuario. Apache no debe listar, servir ni ejecutar nada aquí.
+Require all denied
+Options -Indexes -ExecCGI -Includes
+
+<IfModule php_module>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .phps .pht .cgi .pl .py .asp .aspx .jsp .sh .shtml
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .phps .pht
+
+<FilesMatch ".*">
+  SetHandler none
+  ForceType application/octet-stream
+</FilesMatch>

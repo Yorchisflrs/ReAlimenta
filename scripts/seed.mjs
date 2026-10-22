@@ -1,8 +1,12 @@
 import { pool, transaction, audit } from '../server/db.js';
-import { hashPassword } from '../server/auth.js';
+import { hashPassword, isDemoEmail } from '../server/auth.js';
+import { composeAddress } from '../server/mappers.js';
 
+// Inserta cuentas y donaciones de demostración. Es idempotente y nunca sobrescribe registros existentes:
+// si un correo ya existe, se conserva tal como está (use --restablecer-demo para volver a la contraseña pública).
 const password = 'Realimenta2026!';
 const demoLocation = 'Ubicación demostrativa de punto público, no establecimiento real.';
+const resetDemo = process.argv.includes('--restablecer-demo');
 // Puntos públicos reales, verificados mediante Nominatim y documentados en docs/evidencias/proveedores-reales.json.
 // Ninguna cuenta representa a la institución o al comercio que opere cerca de estos puntos.
 const accounts = [
@@ -11,53 +15,55 @@ const accounts = [
   { correo: 'organizacion2@realimenta.test', nombre: 'Segunda organización de demostración', rol: 'organizacion', perfil: { nombre: 'Red Solidaria · DEMO', responsable: 'Segundo responsable de demostración', direccion: 'Punto público demostrativo: Parque Pino, Puno (segunda cuenta de prueba)', distrito: 'Puno', latitud: -15.8377634, longitud: -70.0280229 } },
   { correo: 'admin@realimenta.test', nombre: 'Administrador de demostración', rol: 'administrador' }
 ];
+const items = [
+  { marker: 'PAN', alimento: 'Pan integral · demostración', categoria: 'Panadería', perfil: 'panaderia', cantidad: 30, unidad: 'unidades', description: 'Pan declarado por un donante ficticio. Solo para demostrar el flujo del MVP.', conservation: 'Temperatura ambiente', note: 'Mantener protegido en un lugar limpio y seco, según declaración de prueba.', cold: false, hours: 24 },
+  { marker: 'FRUTAS', alimento: 'Manzanas y plátanos · demostración', categoria: 'Frutas', perfil: 'frutas', cantidad: 12, unidad: 'kg', description: 'Fruta de demostración. No representa alimentos disponibles en un establecimiento real.', conservation: 'Temperatura ambiente', note: 'Declaración de demostración: proteger de golpes y contaminación.', cold: false, hours: 36 },
+  { marker: 'FRIO', alimento: 'Yogur envasado · demostración', categoria: 'Lácteos', perfil: 'refrigerado', cantidad: 18, unidad: 'unidades', description: 'Escenario de prueba con cadena de frío declarada. Sin certificación sanitaria.', conservation: 'Refrigerado', note: 'Requiere medios de conservación refrigerada según declaración del donante; verificar condiciones antes de coordinar.', cold: true, hours: 12 }
+];
 
 try {
   const hash = await hashPassword(password);
+  const summary = { cuentas_creadas: 0, cuentas_existentes: 0, donaciones_creadas: 0 };
   await transaction(async client => {
     for (const account of accounts) {
-      const existing = (await client.query('SELECT * FROM usuario WHERE lower(correo)=$1', [account.correo])).rows[0];
-      if (existing && !existing.es_demostracion) throw new Error(`El correo ${account.correo} pertenece a una cuenta no demostrativa; no se modificó.`);
-      const user = existing || (await client.query(`INSERT INTO usuario(nombre,correo,hash_contrasena,telefono,rol,es_demostracion)
-        VALUES($1,$2,$3,'000000000',$4,true) RETURNING *`, [account.nombre, account.correo, hash, account.rol])).rows[0];
-      if (existing) await client.query('UPDATE usuario SET hash_contrasena=$2 WHERE id_usuario=$1', [user.id_usuario, hash]);
+      if (!isDemoEmail(account.correo)) throw new Error(`El correo ${account.correo} no pertenece al dominio de demostración.`);
+      let user = (await client.query('SELECT * FROM usuarios WHERE correo = ?', [account.correo])).rows[0];
+      if (user) {
+        summary.cuentas_existentes++;
+        if (resetDemo) await client.query("UPDATE usuarios SET password_hash = ?, estado = 'activo' WHERE id_usuario = ?", [hash, user.id_usuario]);
+      } else {
+        const created = await client.query("INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES (?, ?, ?, '000000000', ?, 'activo')", [account.nombre, account.correo, hash, account.rol]);
+        user = { id_usuario: created.insertId };
+        summary.cuentas_creadas++;
+        await audit(client, user.id_usuario, 'usuarios', user.id_usuario, 'semilla_demostracion', { verificacion: 'Perfil de prueba previamente verificado por semilla; no constituye una verificación administrativa real.' });
+      }
       if (account.perfil) {
-        const entries = Object.entries({ ...account.perfil, departamento: 'Puno', provincia: 'Puno', referencia: demoLocation, ubicacion_confirmada: true, estado_verificacion: 'verificado' });
-        await client.query(`INSERT INTO ${account.rol}(id_usuario,${entries.map(([key]) => key).join(',')})
-          VALUES($1,${entries.map((_, i) => `$${i + 2}`).join(',')}) ON CONFLICT(id_usuario) DO NOTHING`, [user.id_usuario, ...entries.map(([, value]) => value)]);
-        if (existing && process.argv.includes('--refresh-demo-locations')) {
-          await client.query(`UPDATE ${account.rol} SET direccion=$2,latitud=$3,longitud=$4,referencia=$5,ubicacion_confirmada=true WHERE id_usuario=$1`,
-            [user.id_usuario, account.perfil.direccion, account.perfil.latitud, account.perfil.longitud, demoLocation]);
+        const table = account.rol === 'donante' ? 'donantes' : 'organizaciones';
+        if (!(await client.query(`SELECT 1 FROM ${table} WHERE id_usuario = ?`, [user.id_usuario])).rowCount) {
+          const entries = Object.entries({ ...account.perfil, responsable: account.perfil.responsable || account.nombre, direccion: composeAddress(account.perfil.direccion, demoLocation).slice(0, 255), departamento: 'Puno', provincia: 'Puno', estado_verificacion: 'verificado' });
+          await client.query(`INSERT INTO ${table} (id_usuario, ${entries.map(([key]) => key).join(', ')}) VALUES (?, ${entries.map(() => '?').join(', ')})`, [user.id_usuario, ...entries.map(([, value]) => value)]);
         }
       }
-      if (!existing) await audit(client, user.id_usuario, 'usuario', user.id_usuario, 'semilla_demostracion', { verificacion: 'Perfil de prueba previamente verificado por semilla; no constituye una verificación administrativa real.' });
     }
-    const donor = (await client.query("SELECT d.* FROM donante d JOIN usuario u USING(id_usuario) WHERE u.correo='donante@realimenta.test'")).rows[0];
-    if (process.argv.includes('--refresh-demo-locations')) {
-      await client.query(`UPDATE donacion SET direccion_recojo=$2,latitud_recojo=$3,longitud_recojo=$4 WHERE id_donante=$1 AND descripcion LIKE '[DEMO:SEED:%'`,
-        [donor.id_donante, donor.direccion, donor.latitud, donor.longitud]);
-    }
-    const items = [
-      { marker: 'PAN', alimento: 'Pan integral · demostración', categoria: 'Panadería', cantidad: 30, unidad: 'unidades', description: 'Pan declarado por un donante ficticio. Solo para demostrar el flujo del MVP.', preservation: 'Mantener protegido en un lugar limpio y seco, según declaración de prueba.', cold: false, hours: 24 },
-      { marker: 'FRUTAS', alimento: 'Manzanas y plátanos · demostración', categoria: 'Frutas y verduras', cantidad: 12, unidad: 'kg', description: 'Fruta de demostración. No representa alimentos disponibles en un establecimiento real.', preservation: 'Declaración de demostración: proteger de golpes y contaminación.', cold: false, hours: 36 },
-      { marker: 'FRIO', alimento: 'Yogur envasado · demostración', categoria: 'Lácteos', cantidad: 18, unidad: 'unidades', description: 'Escenario de prueba con cadena de frío declarada. Sin certificación sanitaria.', preservation: 'Requiere medios de conservación refrigerada según declaración del donante; verificar condiciones antes de coordinar.', cold: true, hours: 12 }
-    ];
+    const donor = (await client.query("SELECT d.* FROM donantes d JOIN usuarios u ON u.id_usuario = d.id_usuario WHERE u.correo = 'donante@realimenta.test'")).rows[0];
     for (const item of items) {
       const marker = `[DEMO:SEED:${item.marker}]`;
-      if ((await client.query('SELECT 1 FROM donacion WHERE id_donante=$1 AND descripcion LIKE $2', [donor.id_donante, `${marker}%`])).rowCount) continue;
-      const donation = (await client.query(`INSERT INTO donacion(id_donante,alimento,categoria,cantidad,unidad,descripcion,
-        fecha_disponibilidad,fecha_limite_recojo,fecha_limite_aprovechamiento_declarada,direccion_recojo,distrito,
-        latitud_recojo,longitud_recojo,conservacion_declarada,requiere_cadena_frio,envase,observaciones)
-        VALUES($1,$2,$3,$4,$5,$6,now()-interval '5 minutes',now()+$7*interval '1 hour',now()+($7+3)*interval '1 hour',
-        $8,$9,$10,$11,$12,$13,'Envase de demostración declarado',$14) RETURNING id_donacion`,
-        [donor.id_donante, item.alimento, item.categoria, item.cantidad, item.unidad, `${marker} ${item.description}`, item.hours,
-          donor.direccion, donor.distrito, donor.latitud, donor.longitud, item.preservation, item.cold, demoLocation])).rows[0];
-      await audit(client, donor.id_usuario, 'donacion', donation.id_donacion, 'semilla_demostracion', { marker, fechas: 'Relativas a la fecha real del servidor al ejecutar la semilla.' });
+      if ((await client.query('SELECT 1 FROM donaciones WHERE id_donante = ? AND descripcion LIKE ?', [donor.id_donante, `${marker}%`])).rowCount) continue;
+      const created = await client.query(`INSERT INTO donaciones (id_donante, nombre_alimento, categoria, cantidad, unidad, descripcion, estado_producto,
+        fecha_disponibilidad, fecha_limite_recojo, fecha_limite_aprovechamiento, direccion_recojo, latitud, longitud,
+        tipo_conservacion, requiere_cadena_frio, tipo_envase, indicaciones_recojo, observaciones)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW() - INTERVAL 5 MINUTE, NOW() + INTERVAL ? HOUR, NOW() + INTERVAL ? HOUR, ?, ?, ?, ?, ?, 'Envase de demostración declarado', ?, ?)`,
+        [donor.id_donante, item.alimento, item.categoria, item.cantidad, item.unidad, `${marker} ${item.description}`, item.perfil, item.hours, item.hours + 3,
+          'Punto público demostrativo: Catedral Basílica San Carlos Borromeo, Jirón Deustua, Puno', donor.latitud, donor.longitud, item.conservation, item.cold, demoLocation, item.note]);
+      await client.query("INSERT INTO seguimientos (id_donacion, id_usuario, etapa, responsable, observaciones) VALUES (?, ?, 'publicada', ?, 'Donación publicada por la semilla de demostración.')", [created.insertId, donor.id_usuario, donor.nombre_establecimiento.slice(0, 150)]);
+      await audit(client, donor.id_usuario, 'donaciones', created.insertId, 'semilla_demostracion', { marker, fechas: 'Relativas a la fecha real del servidor al ejecutar la semilla.' });
+      summary.donaciones_creadas++;
     }
   });
-  console.log('Semillas de demostración preparadas de forma idempotente.');
+  console.log('Semillas de demostración preparadas de forma idempotente en MySQL.', JSON.stringify(summary));
   console.log('Cuentas .test: donante / organizacion / organizacion2 / admin @realimenta.test');
   console.log(`Contraseña pública y exclusiva de demostración: ${password}`);
+  if (summary.cuentas_existentes && !resetDemo) console.log('Las cuentas que ya existían no se modificaron (use --restablecer-demo para restaurar su contraseña pública).');
   console.log('No usar estas cuentas ni esta contraseña pública en producción.');
-} catch (error) { console.error('No se pudieron preparar semillas:', error.message); process.exitCode = 1; }
+} catch (error) { console.error('No se pudieron preparar semillas:', error.code || '', error.message); process.exitCode = 1; }
 finally { await pool.end(); }

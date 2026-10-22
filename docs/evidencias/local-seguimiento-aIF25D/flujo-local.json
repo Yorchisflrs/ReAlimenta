@@ -1,0 +1,17 @@
+{
+  "ejecucion": "mviwxs69",
+  "proveedor_real": true,
+  "errores_javascript": [],
+  "id_donacion": 4,
+  "rutas": {
+    "ida_km": 0.787,
+    "ida_min": 2.1666666666666665,
+    "traslado_km": 1.258,
+    "traslado_min": 3,
+    "demora_min": 45,
+    "trafico_en_vivo": false
+  },
+  "recepcion_confirmada": true,
+  "hitos": 6,
+  "parametros_persistentes": true
+}

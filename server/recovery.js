@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { transaction, audit } from './db.js';
-import { hashPassword } from './auth.js';
+import { hashPassword, passwordFingerprint, canSignIn, isDemoEmail, cookieOptions } from './auth.js';
 import { config } from './config.js';
 import { fail } from './errors.js';
 import { text } from './validation.js';
@@ -11,9 +11,31 @@ const GENERIC_MESSAGE = 'Si la cuenta admite recuperación, se preparó la solic
 const INVALID_MESSAGE = 'El código no es válido o ha vencido. Solicita uno nuevo.';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const demoEnabled = () => !config.production && process.env.NODE_ENV !== 'production';
-const eligible = user => demoEnabled() && user?.es_demostracion === true && user.estado === 'activo' && ['donante', 'organizacion'].includes(user.rol);
+const eligible = user => demoEnabled() && Boolean(user) && isDemoEmail(user.correo) && canSignIn(user.estado) && ['donante', 'organizacion'].includes(user.rol);
 
-// Contadores defensivos de una instancia. Tokens, uso único y sesiones persisten en PG.
+// El esquema MySQL no tiene tabla de recuperación. Como la recuperación es una simulación local para
+// cuentas de demostración, el código vive en memoria del servidor: un solo código vigente por usuario,
+// solo su hash, vencimiento de 10 minutos y ligado a la contraseña actual (deja de valer al cambiarla).
+const codes = new Map();
+export function issueRecoveryCode(user) {
+  const codigo = randomBytes(32).toString('hex');
+  codes.set(user.id_usuario, { hash: digest(codigo), until: Date.now() + EXPIRATION_MINUTES * 60_000, fingerprint: passwordFingerprint(user.password_hash) });
+  if (codes.size > 5000) { const now = Date.now(); for (const [key, value] of codes) if (value.until <= now) codes.delete(key); }
+  return codigo;
+}
+export function expireRecoveryCode(userId) {
+  const entry = codes.get(userId);
+  if (entry) entry.until = Date.now() - 1;
+}
+function consumeCode(user, codigo) {
+  const entry = codes.get(user.id_usuario);
+  const valid = entry && entry.until > Date.now() && timingSafeEqual(Buffer.from(entry.hash), Buffer.from(digest(codigo))) && entry.fingerprint === passwordFingerprint(user.password_hash);
+  if (!valid) return false;
+  codes.delete(user.id_usuario);
+  return true;
+}
+
+// Contadores defensivos de una instancia.
 const limits = new Map();
 function limit(key, maximum) {
   const now = Date.now();
@@ -46,15 +68,11 @@ recoveryRouter.post('/recuperacion/solicitar', async (req, res) => {
   let demo;
   if (demoEnabled()) {
     demo = await transaction(async client => {
-      const user = (await client.query('SELECT * FROM usuario WHERE lower(correo)=$1 FOR UPDATE', [correo])).rows[0];
-      // No emitir tokens para usuarios reales, administradores, inactivos o correos inexistentes.
+      const user = (await client.query('SELECT * FROM usuarios WHERE correo = ? FOR UPDATE', [correo])).rows[0];
+      // No emitir códigos para usuarios reales, administradores, suspendidos o correos inexistentes.
       if (!eligible(user)) return undefined;
-      const codigo = randomBytes(32).toString('hex');
-      await client.query(`UPDATE recuperacion_contrasena SET fecha_invalidacion=now()
-        WHERE id_usuario=$1 AND fecha_uso IS NULL AND fecha_invalidacion IS NULL`, [user.id_usuario]);
-      await client.query(`INSERT INTO recuperacion_contrasena(id_usuario,hash_codigo,fecha_expiracion)
-        VALUES($1,$2,now()+interval '10 minutes')`, [user.id_usuario, digest(codigo)]);
-      await audit(client, user.id_usuario, 'usuario', user.id_usuario, 'solicitar_recuperacion_demo', { modo: 'simulacion_local', expira_en_minutos: EXPIRATION_MINUTES });
+      const codigo = issueRecoveryCode(user);
+      await audit(client, user.id_usuario, 'usuarios', user.id_usuario, 'solicitar_recuperacion_demo', { modo: 'simulacion_local', expira_en_minutos: EXPIRATION_MINUTES });
       return { codigo, expira_en_minutos: EXPIRATION_MINUTES };
     });
   }
@@ -70,21 +88,15 @@ recoveryRouter.post('/recuperacion/restablecer', async (req, res) => {
   if (typeof password !== 'string' || password.length < 12 || password.length > 128)
     fail(422, 'INVALID_PASSWORD', 'La nueva contraseña debe contener entre 12 y 128 caracteres.');
   if (!demoEnabled()) fail(400, 'RECOVERY_INVALID', INVALID_MESSAGE);
+  const hash = await hashPassword(password);
   await transaction(async client => {
-    const user = (await client.query('SELECT * FROM usuario WHERE lower(correo)=$1 FOR UPDATE', [correo])).rows[0];
-    if (!eligible(user)) fail(400, 'RECOVERY_INVALID', INVALID_MESSAGE);
-    const token = (await client.query(`SELECT id_recuperacion FROM recuperacion_contrasena
-      WHERE id_usuario=$1 AND hash_codigo=$2 AND fecha_uso IS NULL AND fecha_invalidacion IS NULL
-      AND fecha_expiracion>now() FOR UPDATE`, [user.id_usuario, digest(codigo)])).rows[0];
-    if (!token) fail(400, 'RECOVERY_INVALID', INVALID_MESSAGE);
-    const hash = await hashPassword(password);
-    await client.query('UPDATE usuario SET hash_contrasena=$2 WHERE id_usuario=$1', [user.id_usuario, hash]);
-    await client.query('UPDATE recuperacion_contrasena SET fecha_uso=now() WHERE id_recuperacion=$1', [token.id_recuperacion]);
-    await client.query(`UPDATE recuperacion_contrasena SET fecha_invalidacion=now()
-      WHERE id_usuario=$1 AND id_recuperacion<>$2 AND fecha_uso IS NULL AND fecha_invalidacion IS NULL`, [user.id_usuario, token.id_recuperacion]);
-    const revoked = await client.query('DELETE FROM sesion WHERE id_usuario=$1', [user.id_usuario]);
-    await audit(client, user.id_usuario, 'usuario', user.id_usuario, 'restablecer_contrasena_demo', { modo: 'simulacion_local', sesiones_revocadas: revoked.rowCount });
-  });
-  res.clearCookie('realimenta_session', { httpOnly: true, secure: config.production, sameSite: 'lax', path: '/' });
+    // El bloqueo de la fila serializa restablecimientos simultáneos: el segundo ya no encuentra el código.
+    const user = (await client.query('SELECT * FROM usuarios WHERE correo = ? FOR UPDATE', [correo])).rows[0];
+    if (!eligible(user) || !consumeCode(user, codigo)) fail(400, 'RECOVERY_INVALID', INVALID_MESSAGE);
+    await client.query('UPDATE usuarios SET password_hash = ? WHERE id_usuario = ?', [hash, user.id_usuario]);
+    // Las sesiones firmadas incluyen la huella de password_hash: al cambiarla quedan todas revocadas.
+    await audit(client, user.id_usuario, 'usuarios', user.id_usuario, 'restablecer_contrasena_demo', { modo: 'simulacion_local', sesiones_revocadas: 'todas' });
+  }, { retries: 0 });
+  res.clearCookie('realimenta_session', cookieOptions);
   res.json({ data: { message: 'Contraseña actualizada. Las sesiones anteriores se cerraron. Inicia sesión con la nueva contraseña.' } });
 });

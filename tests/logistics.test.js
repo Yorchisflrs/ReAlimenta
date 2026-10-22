@@ -60,3 +60,18 @@ test('Una incidencia crítica o condición no conforme prevalece sobre margen su
   assert.equal(evaluateLogistics(donation,route,{condicion_declarada:'no_conforme'},now).estado_viabilidad,'rojo');
   assert.equal(evaluateLogistics(donation,route,{condicion_declarada:'requiere_revision'},now).estado_viabilidad,'amarillo');
 });
+
+test('La ida de la organización al donante cuenta antes del recojo y se elimina después del recojo',()=>{
+  const initial=evaluateLogistics(donation,route,{viaje_recojo_min:25},now);
+  assert.equal(initial.viaje_recojo_min,25);
+  assert.equal(initial.tiempo_total_estimado_min,95);
+  const moved=evaluateLogistics(donation,route,{viaje_recojo_min:25,etapa_custodia:'recogido'},now);
+  assert.equal(moved.viaje_recojo_min,0);
+  assert.equal(moved.tiempo_total_estimado_min,45);
+});
+
+test('La ida al donante también puede dejar el recojo fuera del plazo declarado',()=>{
+  const result=evaluateLogistics({...donation,fecha_limite_recojo:'2026-10-21T15:35:00Z'},route,{viaje_recojo_min:25},now);
+  assert.equal(result.estado_viabilidad,'rojo');
+  assert.match(result.advertencias.join(' '),/fuera de la ventana/);
+});

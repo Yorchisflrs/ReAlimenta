@@ -1,28 +1,25 @@
-import 'dotenv/config';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
-import pg from 'pg';
-import { createHash, randomBytes } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { randomBytes } from 'node:crypto';
+import { startSandbox } from './helpers/mysql-sandbox.mjs';
 
-const execute = promisify(execFile);
-const originalUrl = process.env.DATABASE_URL;
 const originalEnvironment = process.env.NODE_ENV;
-const databaseName = `realimenta_recovery_test_${process.pid}_${randomBytes(4).toString('hex')}`;
 const oldPassword = 'RecuperacionPrueba2026!';
 const newPassword = 'ClaveNuevaSegura2026!';
-const digest = value => createHash('sha256').update(value).digest('hex');
-let adminPool, pool, server, baseUrl, hashPassword, verifyPassword, fixtureCount = 0, initialHash;
+let sandbox, db, pool, server, baseUrl, hashPassword, verifyPassword, recovery, fixtureCount = 0, initialHash;
+const one = async (sql, params = []) => (await db.query(sql, params)).rows[0];
+const auditOf = async (userId, action) => (await db.query('SELECT descripcion FROM auditoria WHERE id_usuario = ? AND accion = ?', [userId, action])).rows;
 
 async function call(path, body, headers = {}, method = 'POST') {
   const response = await fetch(`${baseUrl}/api/auth${path}`, { method, headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
   return { status: response.status, response, data: await response.json() };
 }
-async function fixture(rol = 'donante', esDemostracion = true, estado = 'activo') {
-  return (await pool.query(`INSERT INTO usuario(nombre,correo,hash_contrasena,telefono,rol,es_demostracion,estado)
-    VALUES($1,$2,$3,'000000000',$4,$5,$6) RETURNING *`, [`Recuperación prueba ${++fixtureCount}`, `recuperacion-${fixtureCount}@realimenta.test`, initialHash, rol, esDemostracion, estado])).rows[0];
+// Cuentas demo usan el dominio reservado @realimenta.test; las "reales" usan otro dominio.
+async function fixture(rol = 'donante', demo = true, estado = 'activo') {
+  const correo = `recuperacion-${++fixtureCount}@${demo ? 'realimenta.test' : 'real.example'}`;
+  const created = await db.query('INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES (?, ?, ?, ?, ?, ?)', [`Recuperación prueba ${fixtureCount}`, correo, initialHash, '000000000', rol, estado]);
+  return one('SELECT * FROM usuarios WHERE id_usuario = ?', [created.insertId]);
 }
 async function requestCode(user) {
   const result = await call('/recuperacion/solicitar', { correo: user.correo });
@@ -33,31 +30,21 @@ async function requestCode(user) {
 async function reset(user, codigo, contrasena = newPassword) {
   return call('/recuperacion/restablecer', { correo: user.correo, codigo, contrasena });
 }
-async function injectedCode(user) {
-  const code = randomBytes(32).toString('hex');
-  await pool.query(`INSERT INTO recuperacion_contrasena(id_usuario,hash_codigo,fecha_expiracion) VALUES($1,$2,now()+interval '10 minutes')`, [user.id_usuario, digest(code)]);
-  return code;
-}
+const currentHash = async user => (await one('SELECT password_hash FROM usuarios WHERE id_usuario = ?', [user.id_usuario])).password_hash;
 
 before(async () => {
-  assert.ok(originalUrl, 'Configure DATABASE_URL para probar recuperación con PostgreSQL real.');
-  adminPool = new pg.Pool({ connectionString: originalUrl });
-  assert.match(databaseName, /^realimenta_recovery_test_\d+_[a-f0-9]+$/);
-  await adminPool.query(`CREATE DATABASE "${databaseName}"`);
-  const url = new URL(originalUrl); url.pathname = `/${databaseName}`;
-  process.env.DATABASE_URL = url.toString();
+  sandbox = await startSandbox();
   process.env.NODE_ENV = 'test';
-  await execute(process.execPath, ['scripts/migrate.mjs'], { env: { ...process.env } });
-  ({ pool } = await import('../server/db.js'));
+  ({ db, pool } = await import('../server/db.js'));
   const auth = await import('../server/auth.js');
   ({ hashPassword, verifyPassword } = auth);
-  const { recoveryRouter } = await import('../server/recovery.js');
+  recovery = await import('../server/recovery.js');
   const { errorHandler } = await import('../server/errors.js');
   initialHash = await hashPassword(oldPassword);
   const app = express();
   app.use(express.json());
   app.use('/api', auth.checkOrigin, auth.loadSession, auth.csrf);
-  app.use('/api/auth', auth.authRouter, recoveryRouter);
+  app.use('/api/auth', auth.authRouter, recovery.recoveryRouter);
   app.use(errorHandler);
   server = app.listen(0, '127.0.0.1');
   await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
@@ -67,38 +54,31 @@ before(async () => {
 after(async () => {
   if (server?.listening) await new Promise(resolve => server.close(resolve));
   if (pool) await pool.end();
-  if (adminPool) {
-    if (/^realimenta_recovery_test_\d+_[a-f0-9]+$/.test(databaseName)) await adminPool.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
-    await adminPool.end();
-  }
-  if (originalUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalUrl;
+  if (sandbox) await sandbox.stop();
   if (originalEnvironment === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalEnvironment;
 });
 
-test('Recuperación: respuesta genérica sin token para correo inexistente, cuenta real, administrador e inactiva', async () => {
-  const users = [await fixture('donante', false), await fixture('organizacion', false), await fixture('administrador'), await fixture('donante', true, 'inactivo')];
+test('Recuperación: respuesta genérica sin código para correo inexistente, cuenta real, administrador y suspendida', async () => {
+  const users = [await fixture('donante', false), await fixture('organizacion', false), await fixture('administrador'), await fixture('donante', true, 'suspendido')];
   const missing = await call('/recuperacion/solicitar', { correo: 'nadie@no-existe.test' });
   assert.equal(missing.status, 200); assert.equal(missing.data.data.demo, undefined);
   for (const user of users) {
     const result = await call('/recuperacion/solicitar', { correo: user.correo });
     assert.deepEqual(result.data, missing.data);
-    assert.equal((await pool.query('SELECT count(*)::int AS total FROM recuperacion_contrasena WHERE id_usuario=$1', [user.id_usuario])).rows[0].total, 0);
+    assert.equal((await auditOf(user.id_usuario, 'solicitar_recuperacion_demo')).length, 0);
   }
   assert.equal((await call('/recuperacion/solicitar', { correo: 'correo-invalido' })).status, 422);
 });
 
-test('Recuperación demo donante y organización: código fuerte, hash PG y expiración de diez minutos', async () => {
+test('Recuperación demo donante y organización: código fuerte de diez minutos que no se guarda en claro', async () => {
   for (const rol of ['donante', 'organizacion']) {
     const user = await fixture(rol);
     const result = await call('/recuperacion/solicitar', { correo: user.correo });
     const { codigo, expira_en_minutos } = result.data.data.demo;
     assert.match(codigo, /^[a-f0-9]{64}$/); assert.equal(expira_en_minutos, 10);
-    const token = (await pool.query('SELECT *,extract(epoch FROM (fecha_expiracion-fecha_creacion)) AS segundos FROM recuperacion_contrasena WHERE id_usuario=$1', [user.id_usuario])).rows[0];
-    assert.equal(token.hash_codigo, digest(codigo)); assert.notEqual(token.hash_codigo, codigo);
-    assert.ok(Math.abs(Number(token.segundos) - 600) < 1);
-    assert.equal(token.fecha_uso, null); assert.equal(token.fecha_invalidacion, null);
-    const events = (await pool.query('SELECT detalle FROM auditoria WHERE id_usuario=$1', [user.id_usuario])).rows;
-    assert.ok(!JSON.stringify(events).includes(codigo));
+    const events = await auditOf(user.id_usuario, 'solicitar_recuperacion_demo');
+    assert.equal(events.length, 1); assert.ok(!JSON.stringify(events).includes(codigo));
+    assert.equal(JSON.parse(events[0].descripcion).expira_en_minutos, 10);
   }
 });
 
@@ -107,28 +87,32 @@ test('Recuperación: código inválido o ausente no cambia la contraseña; contr
   assert.equal((await reset(user, randomBytes(32).toString('hex'))).status, 400);
   assert.equal((await reset(user, '')).status, 400);
   assert.equal((await reset(user, code, 'corta')).status, 422);
-  const row = (await pool.query('SELECT hash_contrasena FROM usuario WHERE id_usuario=$1', [user.id_usuario])).rows[0];
-  assert.equal(row.hash_contrasena, initialHash);
-  assert.equal((await pool.query('SELECT fecha_uso FROM recuperacion_contrasena WHERE hash_codigo=$1', [digest(code)])).rows[0].fecha_uso, null);
+  assert.equal(await currentHash(user), initialHash);
+  assert.equal((await reset(user, code)).status, 200);
 });
 
-test('Recuperación: código vencido según PostgreSQL no restablece', async () => {
+test('Recuperación: código vencido no restablece', async () => {
   const user = await fixture(), code = await requestCode(user);
-  await pool.query(`UPDATE recuperacion_contrasena SET fecha_creacion=now()-interval '11 minutes',fecha_expiracion=now()-interval '1 minute' WHERE hash_codigo=$1`, [digest(code)]);
+  recovery.expireRecoveryCode(user.id_usuario);
   const result = await reset(user, code);
   assert.equal(result.status, 400); assert.equal(result.data.error.code, 'RECOVERY_INVALID');
-  assert.equal((await pool.query('SELECT hash_contrasena FROM usuario WHERE id_usuario=$1', [user.id_usuario])).rows[0].hash_contrasena, initialHash);
+  assert.equal(await currentHash(user), initialHash);
 });
 
-test('Recuperación: emitir otro código invalida el previo y conserva solo uno pendiente', async () => {
+test('Recuperación: emitir otro código invalida el previo y conserva solo uno vigente', async () => {
   const user = await fixture(), first = await requestCode(user), second = await requestCode(user);
   assert.notEqual(first, second);
   assert.equal((await reset(user, first)).status, 400);
-  assert.equal((await pool.query('SELECT count(*)::int AS total FROM recuperacion_contrasena WHERE id_usuario=$1 AND fecha_uso IS NULL AND fecha_invalidacion IS NULL', [user.id_usuario])).rows[0].total, 1);
   assert.equal((await reset(user, second)).status, 200);
 });
 
-test('Recuperación: cambia hash scrypt, revoca todas las sesiones, uso único y no inicia sesión', async () => {
+test('Recuperación: cambiar la contraseña por otra vía invalida un código emitido antes', async () => {
+  const user = await fixture(), code = await requestCode(user);
+  await db.query('UPDATE usuarios SET password_hash = ? WHERE id_usuario = ?', [await hashPassword('OtraClaveCambiada2026!'), user.id_usuario]);
+  assert.equal((await reset(user, code)).status, 400);
+});
+
+test('Recuperación: cambia hash scrypt en usuarios, revoca todas las sesiones, uso único y no inicia sesión', async () => {
   const user = await fixture('organizacion');
   const sessions = [];
   for (let i = 0; i < 2; i++) {
@@ -136,22 +120,21 @@ test('Recuperación: cambia hash scrypt, revoca todas las sesiones, uso único y
     assert.equal(login.status, 200);
     sessions.push(login.response.headers.get('set-cookie').split(';')[0]);
   }
-  assert.equal((await pool.query('SELECT count(*)::int AS total FROM sesion WHERE id_usuario=$1', [user.id_usuario])).rows[0].total, 2);
+  for (const Cookie of sessions) assert.equal((await call('/me', undefined, { Cookie }, 'GET')).status, 200);
   const code = await requestCode(user);
   const result = await reset(user, code);
   assert.equal(result.status, 200); assert.equal(result.data.user, undefined);
   assert.match(result.response.headers.get('set-cookie'), /realimenta_session=;/);
-  const changedHash = (await pool.query('SELECT hash_contrasena FROM usuario WHERE id_usuario=$1', [user.id_usuario])).rows[0].hash_contrasena;
+  const changedHash = await currentHash(user);
   assert.match(changedHash, /^scrypt\$/); assert.notEqual(changedHash, initialHash);
   assert.equal(await verifyPassword(newPassword, changedHash), true);
   assert.equal(await verifyPassword(oldPassword, changedHash), false);
-  assert.equal((await pool.query('SELECT count(*)::int AS total FROM sesion WHERE id_usuario=$1', [user.id_usuario])).rows[0].total, 0);
   for (const Cookie of sessions) assert.equal((await call('/me', undefined, { Cookie }, 'GET')).status, 401);
   assert.equal((await reset(user, code)).status, 400);
   assert.equal((await call('/login', { correo: user.correo, contrasena: oldPassword })).status, 401);
   assert.equal((await call('/login', { correo: user.correo, contrasena: newPassword })).status, 200);
-  const events = (await pool.query("SELECT detalle FROM auditoria WHERE id_usuario=$1 AND accion='restablecer_contrasena_demo'", [user.id_usuario])).rows;
-  assert.equal(events.length, 1); assert.equal(events[0].detalle.sesiones_revocadas, 2);
+  const events = await auditOf(user.id_usuario, 'restablecer_contrasena_demo');
+  assert.equal(events.length, 1); assert.equal(JSON.parse(events[0].descripcion).sesiones_revocadas, 'todas');
   assert.ok(!JSON.stringify(events).includes(newPassword)); assert.ok(!JSON.stringify(events).includes(code));
 });
 
@@ -159,14 +142,14 @@ test('Recuperación: dos restablecimientos simultáneos del mismo código solo p
   const user = await fixture(), code = await requestCode(user);
   const results = await Promise.all([reset(user, code, 'ClaveParalelaPrimera2026!'), reset(user, code, 'ClaveParalelaSegunda2026!')]);
   assert.deepEqual(results.map(value => value.status).sort(), [200, 400]);
-  assert.equal((await pool.query("SELECT count(*)::int AS total FROM auditoria WHERE id_usuario=$1 AND accion='restablecer_contrasena_demo'", [user.id_usuario])).rows[0].total, 1);
+  assert.equal((await auditOf(user.id_usuario, 'restablecer_contrasena_demo')).length, 1);
 });
 
-test('Recuperación: ni cuentas reales ni administrador se restablecen incluso con token inyectado en prueba', async () => {
+test('Recuperación: ni cuentas reales ni administrador se restablecen incluso con código emitido internamente', async () => {
   for (const user of [await fixture('donante', false), await fixture('organizacion', false), await fixture('administrador')]) {
-    const code = await injectedCode(user);
+    const code = recovery.issueRecoveryCode(user);
     assert.equal((await reset(user, code)).status, 400);
-    assert.equal((await pool.query('SELECT hash_contrasena FROM usuario WHERE id_usuario=$1', [user.id_usuario])).rows[0].hash_contrasena, initialHash);
+    assert.equal(await currentHash(user), initialHash);
   }
 });
 
@@ -177,7 +160,7 @@ test('Recuperación: en producción no emite ni acepta códigos demo', async () 
     const request = await call('/recuperacion/solicitar', { correo: user.correo });
     assert.equal(request.status, 200); assert.equal(request.data.data.demo, undefined);
     assert.equal((await reset(user, code)).status, 400);
-    assert.equal((await pool.query('SELECT hash_contrasena FROM usuario WHERE id_usuario=$1', [user.id_usuario])).rows[0].hash_contrasena, initialHash);
+    assert.equal(await currentHash(user), initialHash);
   } finally { process.env.NODE_ENV = 'test'; }
 });
 

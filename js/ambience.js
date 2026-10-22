@@ -1,26 +1,22 @@
-/* Capa visual de fotografías aportadas por el usuario. No cambia datos, formularios ni mapas. */
+/* Ambientación local con imágenes generadas. No sustituye las fotos reales de cada donación. */
 (() => {
   const assets = Object.freeze({
-    feria: 'assets/images/fondos/feria-gastronomica-puno.jpeg',
-    trucha: 'assets/images/fondos/trucha-plato-andino.jpeg',
-    plato: 'assets/images/fondos/plato-tradicional-andino.png',
-    pan: 'assets/images/fondos/pan-artesanal-marca-original.jpeg',
-    quesos: 'assets/images/fondos/quesos-artesanales.jpeg'
+    comunidad: 'assets/images/fondos/entrega-productos-locales-v2.png',
+    pan: 'assets/images/fondos/pan-queso-local-v2.png',
+    cosecha: 'assets/images/fondos/cosecha-andina-v2.png'
   });
   const descriptions = Object.freeze({
-    feria: 'Fotografía aportada: feria gastronómica con mujeres y alimentos tradicionales en Puno.',
-    trucha: 'Fotografía aportada: plato de pescado acompañado de arroz, papas y limón.',
-    plato: 'Fotografía aportada: preparación tradicional andina.',
-    pan: 'Fotografía de pan aportada por el usuario. Se conserva íntegra su marca de agua original.',
-    quesos: 'Fotografía aportada: quesos artesanales.'
+    comunidad: 'Ilustración generada: la misma escena de entrega con pan artesanal, papa, oca, yuca y queso.',
+    pan: 'Ilustración generada de pan artesanal y queso local.',
+    cosecha: 'Ilustración generada de papa nativa, oca y yuca.'
   });
   const views = Object.freeze({
-    dashboard: 'feria', 'mis-donaciones': 'quesos', donaciones: 'quesos', disponibles: 'quesos',
-    'nueva-donacion': 'pan', 'editar-donacion': 'pan', solicitudes: 'plato',
-    seguimiento: 'trucha', recojos: 'trucha', entregas: 'trucha', detalle: 'trucha',
-    perfil: 'quesos', establecimiento: 'quesos', organizacion: 'feria',
-    auditoria: 'plato', incidencias: 'plato', reportes: 'feria',
-    login: 'trucha', registro: 'feria', recuperar:'feria', index: 'feria'
+    dashboard: 'comunidad', 'mis-donaciones': 'pan', donaciones: 'pan', disponibles: 'pan',
+    'nueva-donacion': 'pan', 'editar-donacion': 'pan', solicitudes: 'comunidad',
+    seguimiento: 'cosecha', recojos: 'cosecha', entregas: 'cosecha', detalle: 'cosecha',
+    perfil: 'cosecha', establecimiento: 'cosecha', organizacion: 'comunidad',
+    auditoria: 'comunidad', incidencias: 'cosecha', reportes: 'comunidad',
+    login: 'comunidad', registro: 'pan', recuperar:'cosecha', index: 'comunidad'
   });
   function photograph(key, className) {
     const element = document.createElement('div');
@@ -29,19 +25,14 @@
     element.style.backgroundImage = `url("${assets[key]}")`;
     element.setAttribute('role', 'img');
     element.setAttribute('aria-label', descriptions[key]);
-    if (key === 'pan') {
-      const caption = document.createElement('span');
-      caption.className = 'ambience-original-caption';
-      caption.textContent = 'Fotografía aportada · marca de agua original conservada';
-      element.append(caption);
-    }
     return element;
   }
   function apply(view = 'dashboard', role = document.body.dataset.role || 'publico') {
-    const key = views[view] || 'feria';
+    const key = views[view] || 'comunidad';
     document.body.dataset.ambient = key;
     document.body.dataset.ambientView = view;
     document.body.dataset.ambientRole = role;
+    document.body.style.setProperty('--ambient-image', `url("/${assets[key]}")`);
     const header = document.querySelector('#main-content .mvp-page-header');
     if (header) {
       header.classList.add('has-ambience');

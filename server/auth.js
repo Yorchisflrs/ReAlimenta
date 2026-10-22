@@ -1,10 +1,11 @@
-import { randomBytes, createHash, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHmac, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Router } from 'express';
-import { pool, transaction, audit } from './db.js';
+import { db, transaction, audit } from './db.js';
 import { config } from './config.js';
 import { fail } from './errors.js';
-import { text, optionalText, profileInput } from './validation.js';
+import { text, profileInput } from './validation.js';
+import { donorProfile, organizationProfile } from './mappers.js';
 
 const scrypt = promisify(scryptCallback);
 export async function hashPassword(password) {
@@ -22,29 +23,75 @@ export async function verifyPassword(password, encoded) {
   } catch { return false; }
 }
 
-const tokenHash = token => createHash('sha256').update(token).digest('hex');
+// "pendiente" es el estado inicial de usuarios en MySQL: permite consultar el perfil mientras se verifica.
+// "suspendido" bloquea el acceso.
+export const canSignIn = estado => estado === 'activo' || estado === 'pendiente';
+export const isDemoEmail = correo => String(correo || '').toLowerCase().endsWith(`@${config.demoEmailDomain}`);
+export const fullName = row => [row?.nombres, row?.apellidos].map(value => String(value || '').trim()).filter(Boolean).join(' ');
+
+// Sesiones firmadas con HMAC. El esquema MySQL no incluye tabla de sesiones, así que la cookie
+// lleva usuario, vencimiento y una huella de password_hash: cambiar la contraseña invalida todas las sesiones.
+function sessionSecret() {
+  if (config.sessionSecret.length >= 32) return config.sessionSecret;
+  if (config.production) throw new Error('Configure SESSION_SECRET (al menos 32 caracteres) en .env antes de iniciar en producción.');
+  console.warn('SESSION_SECRET no está configurado en .env: se usa una clave temporal y las sesiones se cerrarán al reiniciar.');
+  return randomBytes(32).toString('hex');
+}
+const secret = sessionSecret();
+const mac = value => createHmac('sha256', secret).update(value).digest();
+export const passwordFingerprint = hash => mac(`password:${hash}`).toString('hex').slice(0, 32);
+const csrfFor = nonce => mac(`csrf:${nonce}`).toString('hex');
+const sameText = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
+// Sesiones cerradas antes de vencer. Se conserva en memoria hasta su vencimiento natural.
+const revoked = new Map();
+function revoke(session) {
+  if (!session) return;
+  revoked.set(session.n, session.e);
+  if (revoked.size > 5000) { const now = Date.now(); for (const [nonce, until] of revoked) if (until <= now) revoked.delete(nonce); }
+}
+function issueSession(row) {
+  const payload = { u: row.id_usuario, n: randomBytes(16).toString('hex'), e: Date.now() + config.sessionHours * 3600000, p: passwordFingerprint(row.password_hash) };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return { token: `${body}.${mac(body).toString('base64url')}`, payload, csrfToken: csrfFor(payload.n) };
+}
+function readSession(token) {
+  if (!/^[A-Za-z0-9_-]{20,400}\.[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  const [body, signature] = token.split('.');
+  if (!sameText(signature, mac(body).toString('base64url'))) return null;
+  let payload;
+  try { payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { return null; }
+  if (!payload || !Number.isSafeInteger(payload.u) || payload.u <= 0 || !/^[a-f0-9]{32}$/.test(String(payload.n)) ||
+      !Number.isFinite(payload.e) || payload.e <= Date.now() || typeof payload.p !== 'string' || revoked.has(payload.n)) return null;
+  return payload;
+}
 function sessionCookie(req) {
   const value = String(req.headers.cookie || '').split(';').map(item => item.trim()).find(item => item.startsWith('realimenta_session='));
   return value ? value.slice('realimenta_session='.length) : '';
 }
-const cookieOptions = { httpOnly: true, secure: config.production, sameSite: 'lax', path: '/' };
+export const cookieOptions = { httpOnly: true, secure: config.production, sameSite: 'lax', path: '/' };
 
-export async function userFromRow(row, client = pool) {
+export async function userFromRow(row, client = db) {
   if (!row) return null;
-  const { id_usuario, nombre, correo, telefono, rol, estado, es_demostracion } = row;
-  let perfil = null;
-  if (rol === 'donante' || rol === 'organizacion') perfil = (await client.query(`SELECT * FROM ${rol} WHERE id_usuario=$1`, [id_usuario])).rows[0] || null;
-  return { id_usuario, nombre, correo, telefono, rol, estado, es_demostracion, perfil };
+  const user = {
+    id_usuario: row.id_usuario, nombre: fullName(row), nombres: row.nombres, apellidos: row.apellidos || '',
+    correo: row.correo, telefono: row.telefono || '', rol: row.rol, estado: row.estado,
+    es_demostracion: isDemoEmail(row.correo), fecha_registro: row.fecha_registro, perfil: null
+  };
+  if (row.rol === 'donante') user.perfil = donorProfile((await client.query('SELECT * FROM donantes WHERE id_usuario = ?', [row.id_usuario])).rows[0]);
+  else if (row.rol === 'organizacion') user.perfil = organizationProfile((await client.query('SELECT * FROM organizaciones WHERE id_usuario = ?', [row.id_usuario])).rows[0]);
+  return user;
 }
+export const publicUser = user => ({ id_usuario: user.id_usuario, nombre: user.nombre, correo: user.correo, telefono: user.telefono, rol: user.rol, estado: user.estado });
+
 export async function loadSession(req, res, next) {
-  const token = sessionCookie(req);
-  if (token && /^[a-f0-9]{64}$/.test(token)) {
-    const row = (await pool.query(`SELECT u.*,s.csrf_token FROM sesion s JOIN usuario u USING(id_usuario)
-      WHERE s.hash_token=$1 AND s.fecha_expiracion>now() AND u.estado='activo'`, [tokenHash(token)])).rows[0];
-    if (row) {
+  const session = readSession(sessionCookie(req));
+  if (session) {
+    const row = (await db.query('SELECT * FROM usuarios WHERE id_usuario = ?', [session.u])).rows[0];
+    if (row && canSignIn(row.estado) && sameText(passwordFingerprint(row.password_hash), session.p)) {
       req.user = await userFromRow(row);
-      req.csrfToken = row.csrf_token;
-      req.sessionHash = tokenHash(token);
+      req.csrfToken = csrfFor(session.n);
+      req.session = session;
     }
   }
   next();
@@ -77,12 +124,12 @@ export function csrf(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || ['/auth/login', '/auth/register', '/auth/recuperacion/solicitar', '/auth/recuperacion/restablecer'].includes(req.path)) return next();
   requireAuth(req, res, () => {});
   const value = req.get('x-csrf-token') || '';
-  if (!/^[a-f0-9]{64}$/.test(value) || value.length !== req.csrfToken.length || !timingSafeEqual(Buffer.from(value), Buffer.from(req.csrfToken)))
+  if (!/^[a-f0-9]{64}$/.test(value) || !sameText(value, req.csrfToken))
     fail(403, 'CSRF_REQUIRED', 'La sesión de seguridad cambió. Actualice la página e intente nuevamente.');
   next();
 }
 
-// Límite defensivo por IP; las entidades de negocio y las sesiones sí persisten en PostgreSQL.
+// Límite defensivo por IP; usuarios, perfiles y auditoría persisten en MySQL.
 const attempts = new Map();
 function loginLimit(req) {
   const key = req.ip;
@@ -97,52 +144,50 @@ function passwordInput(value) {
     fail(422, 'INVALID_PASSWORD', 'La contraseña debe contener entre 12 y 128 caracteres.');
   return value;
 }
+const DUMMY_HASH = 'scrypt$16384$8$1$fb532b197b88147b5c4ab329a711f814$' + '00'.repeat(64);
+
 export const authRouter = Router();
 authRouter.get('/me', requireAuth, (req, res) => res.json({ user: req.user, csrfToken: req.csrfToken }));
 authRouter.post('/login', async (req, res) => {
   loginLimit(req);
   const correo = text(req.body.correo, 'correo', 3, 254).toLowerCase();
   const password = typeof req.body.contrasena === 'string' && req.body.contrasena.length <= 128 ? req.body.contrasena : '';
-  const row = (await pool.query('SELECT * FROM usuario WHERE lower(correo)=$1', [correo])).rows[0];
+  const row = (await db.query('SELECT * FROM usuarios WHERE correo = ?', [correo])).rows[0];
   // Ejecutar hash también para usuarios inexistentes reduce diferencias de tiempo observables.
-  const encoded = row?.hash_contrasena || 'scrypt$16384$8$1$fb532b197b88147b5c4ab329a711f814$' + '00'.repeat(64);
-  const verified = await verifyPassword(password, encoded);
-  if (!row || !verified || row.estado !== 'activo') fail(401, 'INVALID_CREDENTIALS', 'Correo o contraseña incorrectos.');
-  const token = randomBytes(32).toString('hex'), csrfToken = randomBytes(32).toString('hex');
-  const user = await transaction(async client => {
-    if (req.sessionHash) await client.query('DELETE FROM sesion WHERE hash_token=$1', [req.sessionHash]);
-    await client.query('DELETE FROM sesion WHERE fecha_expiracion<=now()');
-    await client.query(`INSERT INTO sesion(hash_token,id_usuario,csrf_token,fecha_expiracion)
-      VALUES($1,$2,$3,now()+$4*interval '1 hour')`, [tokenHash(token), row.id_usuario, csrfToken, config.sessionHours]);
-    await audit(client, row.id_usuario, 'usuario', row.id_usuario, 'iniciar_sesion');
-    return userFromRow(row, client);
-  });
-  res.cookie('realimenta_session', token, { ...cookieOptions, maxAge: config.sessionHours * 3600000 });
-  res.json({ user, csrfToken });
+  const verified = await verifyPassword(password, row?.password_hash || DUMMY_HASH);
+  if (!row || !verified || !canSignIn(row.estado)) fail(401, 'INVALID_CREDENTIALS', 'Correo o contraseña incorrectos.');
+  const issued = issueSession(row);
+  revoke(req.session);
+  await audit(db, row.id_usuario, 'usuarios', row.id_usuario, 'iniciar_sesion');
+  const user = await userFromRow(row);
+  res.cookie('realimenta_session', issued.token, { ...cookieOptions, maxAge: config.sessionHours * 3600000 });
+  res.json({ user, csrfToken: issued.csrfToken });
 });
 authRouter.post('/logout', requireAuth, async (req, res) => {
-  await transaction(async client => {
-    await client.query('DELETE FROM sesion WHERE hash_token=$1', [req.sessionHash]);
-    await audit(client, req.user.id_usuario, 'usuario', req.user.id_usuario, 'cerrar_sesion');
-  });
+  revoke(req.session);
+  await audit(db, req.user.id_usuario, 'usuarios', req.user.id_usuario, 'cerrar_sesion');
   res.clearCookie('realimenta_session', cookieOptions).json({ data: { message: 'Sesión cerrada.' } });
 });
 authRouter.post('/register', async (req, res) => {
   loginLimit(req);
-  const nombre = text(req.body.nombre, 'nombre', 2, 160);
-  const correo = text(req.body.correo, 'correo', 5, 254).toLowerCase();
+  const nombre = text(req.body.nombre, 'nombre', 2, 150);
+  const correo = text(req.body.correo, 'correo', 5, 150).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) fail(422, 'INVALID_EMAIL', 'Ingrese un correo válido.');
   const rol = req.body.rol;
   if (!['donante', 'organizacion'].includes(rol)) fail(422, 'INVALID_ROLE', 'Solo se permite registro público de donantes u organizaciones.');
-  const telefono = text(req.body.telefono, 'teléfono', 6, 40);
+  const telefono = text(req.body.telefono, 'teléfono', 6, 20);
   const perfil = profileInput(req.body, rol);
   const hash = await hashPassword(passwordInput(req.body.contrasena));
   const result = await transaction(async client => {
-    const user = (await client.query(`INSERT INTO usuario(nombre,correo,hash_contrasena,telefono,rol) VALUES($1,$2,$3,$4,$5) RETURNING *`, [nombre, correo, hash, telefono, rol])).rows[0];
+    if ((await client.query('SELECT 1 FROM usuarios WHERE correo = ?', [correo])).rowCount)
+      fail(409, 'EMAIL_IN_USE', 'Ya existe una cuenta registrada con este correo.');
+    // estado queda con el valor por defecto de la tabla ("pendiente") hasta la verificación administrativa.
+    const user = await client.query('INSERT INTO usuarios (nombres, apellidos, correo, password_hash, telefono, rol) VALUES (?, NULL, ?, ?, ?, ?)', [nombre, correo, hash, telefono, rol]);
     const entries = Object.entries(perfil);
-    await client.query(`INSERT INTO ${rol}(id_usuario,${entries.map(([k]) => k).join(',')}) VALUES($1,${entries.map((_, i) => `$${i + 2}`).join(',')})`, [user.id_usuario, ...entries.map(([, v]) => v)]);
-    await audit(client, user.id_usuario, 'usuario', user.id_usuario, 'registrar', { rol, estado_verificacion: 'pendiente' });
-    return { id_usuario: user.id_usuario, estado_verificacion: 'pendiente', message: 'Cuenta registrada. El perfil requiere verificación administrativa; puede iniciar sesión para consultar sus datos.' };
+    await client.query(`INSERT INTO ${rol === 'donante' ? 'donantes' : 'organizaciones'} (id_usuario, ${entries.map(([key]) => key).join(', ')})
+      VALUES (?, ${entries.map(() => '?').join(', ')})`, [user.insertId, ...entries.map(([, value]) => value)]);
+    await audit(client, user.insertId, 'usuarios', user.insertId, 'registrar', { rol, estado_verificacion: 'pendiente' });
+    return { id_usuario: user.insertId, estado_verificacion: 'pendiente', message: 'Cuenta registrada. El perfil requiere verificación administrativa; puede iniciar sesión para consultar sus datos.' };
   });
   res.status(201).json({ data: result });
 });

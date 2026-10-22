@@ -1,0 +1,31 @@
+{
+  "ejecucion": "mvirwch3-nuevas",
+  "fecha_inicio": "2026-10-21T23:58:33.346Z",
+  "navegador": "Chrome del sistema mediante Playwright",
+  "pruebas": [
+    {
+      "nombre": "Foto propia: valida SVG, muestra vista previa y persiste imagen real tras recargar",
+      "estado": "passed",
+      "duracion_ms": 7655,
+      "error": null
+    }
+  ],
+  "registros_creados": [
+    {
+      "id_donacion": 4,
+      "alimento": "Prueba UI mvirwch3-nuevas foto propia"
+    }
+  ],
+  "errores_javascript": [],
+  "peticiones_simuladas": false,
+  "foto_propia": {
+    "id_donacion": 4,
+    "url": "/media/donaciones/donacion_4_554bd0ce37d36e20.webp",
+    "bytes_originales_seleccionados": 260209,
+    "bytes_webp": 218908,
+    "persistencia_recarga": true,
+    "svg_rechazado_cliente": true,
+    "svg_rechazado_api": 415
+  },
+  "fecha_fin": "2026-10-21T23:58:41.712Z"
+}
