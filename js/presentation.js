@@ -41,7 +41,7 @@
       const badge=card.querySelector('.mini-feasibility');
       if(plan?.ruta){
         const row=document.createElement('div');row.className='card-route-preview';
-        row.innerHTML=`<div><i class="fa-solid fa-route"></i><strong>${num(plan.ruta.distancia_km)} km</strong><span>${num(plan.ruta.duracion_estimada_min)} min base</span></div><small>Hasta ${esc(plan.destino?.nombre||state.profile.nombre||'organización evaluada')} · sin tráfico en vivo</small>`;
+        row.innerHTML=`<div><i class="fa-solid fa-route"></i><strong>${num(plan.ruta.distancia_km)} km</strong><span>${num(plan.ruta.duracion_estimada_min)} min base</span></div><small>Hasta ${esc(plan.destino?.nombre||state.profile.nombre||'beneficiaria evaluada')} · sin tráfico en vivo</small>`;
         badge.before(row);
         const tone=plan.evaluacion.estado_viabilidad;
         badge.className=`mini-feasibility ${['verde','amarillo','rojo','gris'].includes(tone)?tone:'gris'}`;
@@ -65,39 +65,23 @@
   function journey(result,places={}){
     if(!result?.ruta)return '';
     const pickup=result.ruta_recojo,origin=places.origen||result.origen||result.ruta.origen,destination=places.destino||result.destino||result.ruta.destino;
-    const from=origin?.nombre||origin?.direccion||'Establecimiento donante',to=destination?.nombre||destination?.direccion||'Organización receptora';
+    const from=origin?.nombre||origin?.direccion||'Establecimiento donante',to=destination?.nombre||destination?.direccion||'Beneficiaria';
     return `<div class="journey-legs"><article class="journey-leg ${!pickup?'completed':''}" data-journey-leg="recojo"><span><i class="fa-solid fa-car-side"></i> 1 · Ir al punto de recojo</span><strong>${pickup?`${num(pickup.distancia_km)} km · ${num(pickup.duracion_estimada_min)} min`:'Recojo ya registrado'}</strong><p>${esc(to)} → ${esc(from)}</p><small>${pickup?'Ida por carretera; se incluye en el tiempo total antes del recojo.':'El viaje de ida ya no se vuelve a sumar.'}</small></article><article class="journey-leg" data-journey-leg="entrega"><span><i class="fa-solid fa-box"></i> 2 · Trasladar los alimentos</span><strong>${num(result.ruta.distancia_km)} km · ${num(result.ruta.duracion_estimada_min)} min</strong><p>${esc(from)} → ${esc(to)}</p><small>Ruta base mostrada en el mapa. La demora elegida se suma a este traslado.</small></article></div>`;
   }
-  async function routeForm(root,state){
-    const form=root.querySelector('#route-form');if(!form||form.dataset.enhanced)return;
+  // Detalle: foto principal y galería por ángulo. El cálculo de llegada lo hace mvp.js con el mapa simple.
+  function routeForm(root,state){
+    const form=root.querySelector('#eta-form');if(!form||form.dataset.enhanced)return;
     form.dataset.enhanced='true';
-    const extra=document.createElement('label');extra.className='full';extra.innerHTML='Escenario de tráfico<select class="form-control" name="demora_trafico_min"><option value="0">Ruta base · sin demora adicional</option><option value="10">Congestión leve · +10 min</option><option value="25">Congestión media · +25 min</option><option value="45">Congestión alta · +45 min</option><option value="90">Demora severa · +90 min</option><option value="180">Comparar con una demora de 3 horas</option></select>';
-    form.querySelector('.form-grid').append(extra);
     const selected=state.selected;
     const description=root.querySelector('.detail-summary>p');if(description)description.textContent=description.textContent.replace(/^\[DEMO:(?:SEED|PRESENTACION):[A-Z_]+\]\s*/,'');
-    const isOrg=state.user.rol==='organizacion';
-    let destination=state.selectedRequest?.organizacion || (isOrg?state.profile:null);
-    if(!isOrg&&!state.selectedRequest){
-      const label=document.createElement('label');label.className='route-destination-field';label.innerHTML='Organización de destino<select class="form-control" name="id_organizacion" required><option value="">Cargando destinos…</option></select>';
-      form.prepend(label);
-      try{
-        const response=await REA.request('/api/destinos');if(!root.contains(form))return;
-        label.querySelector('select').innerHTML=response.data.map(o=>`<option value="${Number(o.id_organizacion)}" ${Number(o.id_organizacion)===Number(selected.plan_ruta?.id_organizacion)?'selected':''}>${esc(o.nombre)} · ${esc(o.distrito)}</option>`).join('');
-        const refresh=()=>{const chosen=response.data.find(o=>Number(o.id_organizacion)===Number(form.id_organizacion.value));destination=chosen;const side=root.querySelector('.location-steps>div:last-child strong');if(side)side.textContent=chosen?`${chosen.nombre} · ${chosen.direccion}`:'Selecciona destino';};refresh();
-        label.querySelector('select').addEventListener('change',()=>{refresh();root.querySelector('#route-evaluation').innerHTML=ctx.renderEvaluation(null);root.querySelector('[data-route-provider]').textContent='Destino cambiado: calcula la ruta para este nuevo destino.';REAMaps.dispose(root.querySelector('#delivery-map'));root.querySelector('#delivery-map').replaceChildren();});
-      }catch(error){form.querySelector('[data-route-error]').textContent=error.message;form.querySelector('[data-route-error]').hidden=false;return;}
-    }
-    const dest=root.querySelector('.location-steps>div:last-child strong');if(dest&&destination)dest.textContent=`${destination.nombre} · ${destination.direccion}`;
     const hero=document.createElement('div');hero.className='detail-food-photo';hero.innerHTML=`<img src="${photo(selected)}" alt="${selected.fotos?.length?'Fotografía compartida por el donante':'Fotografía referencial del tipo de alimento'}"><span>${selected.fotos?.length?'Foto del donante':'Fotografía referencial'} · ${esc(profiles[selected.perfil_alimento]||profiles.general)}</span>`;
     root.querySelector('.detail-summary').prepend(hero);
-    if(selected.fotos?.length>1){const gallery=document.createElement('div');gallery.className='detail-food-gallery';for(const f of selected.fotos){const img=document.createElement('img');img.src=f.url;img.alt='Fotografía adicional compartida por el donante';gallery.append(img);}hero.after(gallery);}
-    const moved=['recogido','en_transito','entregado','confirmado'].includes(selected.cadena_custodia?.estado);
-    if(selected.plan_ruta&&(selected.plan_ruta.ruta_recojo||moved)&&(!state.selectedRequest||Number(state.selectedRequest.id_organizacion)===Number(selected.plan_ruta.id_organizacion))){ctx.displayRoute(selected.plan_ruta);}
-    else if(isOrg||state.selectedRequest){
-      try{
-        const response=await REA.request(`/api/donaciones/${selected.id_donacion}/evaluacion`,{method:'POST',body:{preparacion_min:10,recojo_min:10,entrega_min:5,margen_seguridad_min:15,...(state.selectedRequest?{id_solicitud:state.selectedRequest.id_solicitud}:{})}});
-        if(root.contains(form)&&state.selected===selected)ctx.displayRoute(response.data);
-      }catch(error){if(root.contains(form)){const el=form.querySelector('[data-route-error]');el.textContent=error.message;el.hidden=false;}}
+    if(selected.fotos?.length>1){
+      const angles=['De frente','De costado','De cerca'];
+      const gallery=document.createElement('div');gallery.className='detail-food-gallery';
+      // Al tocar una miniatura se ve en grande, para revisar el alimento desde cada ángulo.
+      selected.fotos.forEach((f,i)=>{const figure=document.createElement('figure');const img=document.createElement('img');img.src=f.url;img.alt=`Foto ${(angles[i]||'adicional').toLowerCase()} compartida por el donante`;const caption=document.createElement('figcaption');caption.textContent=angles[i]||'Foto adicional';figure.append(img,caption);figure.addEventListener('click',()=>{hero.querySelector('img').src=f.url;hero.querySelector('img').alt=img.alt;});gallery.append(figure);});
+      hero.after(gallery);
     }
   }
   function donationForm(root,state){
@@ -105,19 +89,11 @@
     form.dataset.enhanced='true';
     const d=form.dataset.id?state.selected:{};
     REAImages.mount(form,d||{});
-    // La tabla donaciones no guarda una foto referencial elegida: se deduce del alimento y la categoría.
-    const profile=document.createElement('label');profile.innerHTML=`Tipo de alimento<select class="form-control" name="perfil_alimento">${Object.entries(profiles).map(([k,v])=>`<option value="${k}" ${k===d?.perfil_alimento?'selected':''}>${esc(v)}</option>`).join('')}</select>`;form.querySelector('.form-grid').append(profile);
-    const availability=form.querySelector('[name="fecha_disponibilidad"]');
-    const duration=document.createElement('label');duration.className='full';duration.innerHTML='Atajo opcional · plazo declarado desde disponibilidad (min)<input class="form-control" type="number" name="plazo_declarado_min" min="5" max="10080" placeholder="Ej. 60 si el responsable declara una hora"><small class="small-muted">No se asigna duración por categoría. Este atajo completa las fechas; usa un plazo validado para ese lote, su elaboración y conservación.</small>';
-    form.querySelector('[name="fecha_limite_aprovechamiento_declarada"]').closest('label').after(duration);
-    duration.querySelector('input').addEventListener('change',()=>{
-      const min=Number(duration.querySelector('input').value);if(!min||!availability.value)return;
-      const start=Date.parse(`${availability.value}:00-05:00`),limit=start+min*60000;
-      const local=value=>new Date(value-5*3600000).toISOString().slice(0,16);
-      form.fecha_limite_aprovechamiento_declarada.value=local(limit);
-      if(Date.parse(`${form.fecha_limite_recojo.value}:00-05:00`)>=limit)form.fecha_limite_recojo.value=local(limit-Math.min(5,min/2)*60000);
-    });
+    // El perfil del alimento se deduce de la categoría para no pedir dos veces lo mismo al donante.
+    const byCategory={'Panadería':'panaderia','Frutas':'frutas','Verduras':'hortalizas','Lácteos':'refrigerado','Alimentos preparados':'preparado','Abarrotes':'seco'};
+    const profile=document.createElement('input');profile.type='hidden';profile.name='perfil_alimento';profile.value=d?.perfil_alimento||byCategory[form.categoria.value]||'general';form.append(profile);
+    form.categoria.addEventListener('change',()=>{profile.value=byCategory[form.categoria.value]||'general';});
   }
-  window.REAPresentation={configure(value){ctx=value;},photo,profiles,comparison,journey,decorate,enhance(root,state){decorate(root,state);donationForm(root,state);void routeForm(root,state);}};
+  window.REAPresentation={configure(value){ctx=value;},photo,profiles,comparison,journey,decorate,enhance(root,state){decorate(root,state);donationForm(root,state);routeForm(root,state);}};
   document.addEventListener('click',event=>{const button=event.target.closest('[data-presentation-tracking]');if(button)REACustody.open(Number(button.dataset.presentationTracking));});
 })();

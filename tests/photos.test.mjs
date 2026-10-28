@@ -27,7 +27,7 @@ async function login(correo) {
 }
 async function donor() {
   const correo = `photos-donor-${++donorCounter}@realimenta.test`;
-  const user = await db.query("INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES ('Donante de prueba de fotografías', ?, ?, '000000000', 'donante', 'activo')", [correo, sourceHash]);
+  const user = await db.query("INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES ('Donante de prueba de fotografías', ?, ?, '951000000', 'donante', 'activo')", [correo, sourceHash]);
   await db.query("INSERT INTO donantes (id_usuario, nombre_establecimiento, direccion, distrito, latitud, longitud, estado_verificacion) VALUES (?, 'Establecimiento de prueba aislada', 'Punto público demostrativo de Puno', 'Puno', -15.840908, -70.0289581, 'verificado')", [user.insertId]);
   return login(correo);
 }
@@ -46,7 +46,7 @@ async function media(url, account) {
   return { status: response.status, response, buffer: Buffer.from(await response.arrayBuffer()) };
 }
 async function request(donationId) {
-  const result = await call('POST', `/api/donaciones/${donationId}/solicitudes`, { responsable_recojo: 'Responsable de fotografía prueba', telefono: '000000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString() }, accounts.organizacion);
+  const result = await call('POST', `/api/donaciones/${donationId}/solicitudes`, { responsable_recojo: 'Responsable de fotografía prueba', telefono: '951000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString() }, accounts.organizacion);
   assert.equal(result.status, 201, JSON.stringify(result.data));
   return result.data.data;
 }
@@ -111,14 +111,12 @@ test('Fotografías: PNG y WebP válidos mantienen proporción y aparecen en Mis 
   assert.equal(catalog.find(row => row.id_donacion === d.id_donacion).fotos[0].url, first.data.data.url);
 });
 
-test('Fotografías: las cinco imágenes aportadas por el usuario se suben, registran y leen en MySQL', async () => {
+test('Fotografías: las tres fotos (frente, costado y cerca) se suben, registran y leen en MySQL', async () => {
   const account = await donor(), d = await donation(account);
   const files = [
     ['feria-gastronomica-puno.jpeg', 'image/jpeg'],
     ['trucha-plato-andino.jpeg', 'image/jpeg'],
-    ['plato-tradicional-andino.png', 'image/png'],
-    ['pan-artesanal-marca-original.jpeg', 'image/jpeg'],
-    ['quesos-artesanales.jpeg', 'image/jpeg']
+    ['plato-tradicional-andino.png', 'image/png']
   ];
   for (const [name, mime] of files) {
     const buffer = await readFile(new URL(`../assets/images/fondos/${name}`, import.meta.url));
@@ -158,17 +156,17 @@ test('Fotografías: límite 5 MB y límite 25 megapíxeles con errores comprensi
   assert.equal(result.status, 422); assert.equal(result.data.error.code, 'PHOTO_INVALID');
 });
 
-test('Fotografías: álbum máximo de cinco incluso con dos cargas finales simultáneas; primera portada estable', async () => {
+test('Fotografías: máximo de tres fotos incluso con dos cargas finales simultáneas; primera portada estable', async () => {
   const account = await donor(), d = await donation(account);
   const first = await upload(d.id_donacion, account); assert.equal(first.status, 201);
-  for (let i = 0; i < 3; i++) assert.equal((await upload(d.id_donacion, account)).status, 201);
+  assert.equal((await upload(d.id_donacion, account)).status, 201);
   const parallel = await Promise.all([upload(d.id_donacion, account), upload(d.id_donacion, account)]);
   assert.deepEqual(parallel.map(result => result.status).sort(), [201, 409]);
   assert.equal(parallel.find(result => result.status === 409).data.error.code, 'PHOTO_LIMIT');
   const detail = (await call('GET', `/api/donaciones/${d.id_donacion}`, undefined, account)).data.data;
-  assert.equal(detail.fotos.length, 5); assert.equal(detail.fotos[0].url, first.data.data.url);
+  assert.equal(detail.fotos.length, 3); assert.equal(detail.fotos[0].url, first.data.data.url);
   assert.equal((await one('SELECT COUNT(*) AS total FROM donacion_fotos WHERE id_donacion = ? AND es_principal = 1', [d.id_donacion])).total, 1);
-  assert.equal((await storedFiles()).filter(name => name.startsWith(`donacion_${d.id_donacion}_`)).length, 5);
+  assert.equal((await storedFiles()).filter(name => name.startsWith(`donacion_${d.id_donacion}_`)).length, 3);
 });
 
 test('Fotografías: exige sesión, CSRF, donante verificado y propiedad', async () => {

@@ -63,7 +63,7 @@ test('Flujo local completo: publicar 60 panes con foto, solicitar, aceptar, ruta
   await page.locator('[data-action="new-request"]').click();
   const request=page.locator('#request-form');
   await request.locator('[name="responsable_recojo"]').fill('Responsable de organización en prueba');
-  await request.locator('[name="telefono"]').fill('000000000');
+  await request.locator('[name="telefono"]').fill('951000000');
   await request.locator('[name="fecha_propuesta"]').fill(limaInput(5));
   await request.locator('[name="transporte_declarado"]').fill('Vehículo para recojo y traslado');
   await request.locator('[name="recipiente_declarado"]').fill('Caja limpia con tapa');

@@ -4,7 +4,7 @@ import { transaction, audit } from './db.js';
 import { hashPassword, passwordFingerprint, canSignIn, isDemoEmail, cookieOptions } from './auth.js';
 import { config } from './config.js';
 import { fail } from './errors.js';
-import { text } from './validation.js';
+import { text, password as passwordRule } from './validation.js';
 
 const EXPIRATION_MINUTES = 10;
 const GENERIC_MESSAGE = 'Si la cuenta admite recuperación, se preparó la solicitud. Este MVP solo simula el proceso para cuentas de demostración; no envía correos reales.';
@@ -84,9 +84,7 @@ recoveryRouter.post('/recuperacion/restablecer', async (req, res) => {
   guard(req, correo, 'reset');
   const codigo = typeof req.body.codigo === 'string' ? req.body.codigo.trim().toLowerCase() : '';
   if (!/^[a-f0-9]{64}$/.test(codigo)) fail(400, 'RECOVERY_INVALID', INVALID_MESSAGE);
-  const password = req.body.contrasena;
-  if (typeof password !== 'string' || password.length < 12 || password.length > 128)
-    fail(422, 'INVALID_PASSWORD', 'La nueva contraseña debe contener entre 12 y 128 caracteres.');
+  const password = passwordRule(req.body.contrasena);
   if (!demoEnabled()) fail(400, 'RECOVERY_INVALID', INVALID_MESSAGE);
   const hash = await hashPassword(password);
   await transaction(async client => {

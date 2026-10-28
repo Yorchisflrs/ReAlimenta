@@ -18,7 +18,7 @@ async function call(path, body, headers = {}, method = 'POST') {
 // Cuentas demo usan el dominio reservado @realimenta.test; las "reales" usan otro dominio.
 async function fixture(rol = 'donante', demo = true, estado = 'activo') {
   const correo = `recuperacion-${++fixtureCount}@${demo ? 'realimenta.test' : 'real.example'}`;
-  const created = await db.query('INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES (?, ?, ?, ?, ?, ?)', [`Recuperación prueba ${fixtureCount}`, correo, initialHash, '000000000', rol, estado]);
+  const created = await db.query('INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES (?, ?, ?, ?, ?, ?)', [`Recuperación prueba ${fixtureCount}`, correo, initialHash, '951000000', rol, estado]);
   return one('SELECT * FROM usuarios WHERE id_usuario = ?', [created.insertId]);
 }
 async function requestCode(user) {

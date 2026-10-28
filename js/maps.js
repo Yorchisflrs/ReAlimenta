@@ -69,9 +69,38 @@
     const polyline = L.geoJSON(route.geometry, { style: { color, weight: 6, opacity: .9 } }).addTo(map);
     const popup=(label,point)=>{const node=document.createElement('div');const strong=document.createElement('strong');strong.textContent=`${label} · ${point.nombre||''}`;node.append(strong);if(point.direccion){const p=document.createElement('p');p.textContent=point.direccion;node.append(p);}return node;};
     L.marker([route.origen.latitud, route.origen.longitud], { icon: markerIcon('A','#087f5b'),title:'A · Establecimiento donante' }).addTo(map).bindPopup(popup('A · Donante',route.origen));
-    L.marker([route.destino.latitud, route.destino.longitud], { icon: markerIcon('B','#ef8d3c'),title:'B · Organización receptora' }).addTo(map).bindPopup(popup('B · Organización',route.destino));
+    L.marker([route.destino.latitud, route.destino.longitud], { icon: markerIcon('B','#ef8d3c'),title:'B · Beneficiaria' }).addTo(map).bindPopup(popup('B · Beneficiaria',route.destino));
     map.fitBounds(polyline.getBounds(), { padding: [35,35],animate:false });
     return map;
   }
-  window.REAMaps = { mountPicker, search, showRoute, dispose };
+  // Mapa simple de llegada: el punto de recojo es fijo y el punto de salida se marca tocando el mapa.
+  function mountEta(container, { destination, start, onStart } = {}) {
+    const map = canvas(container);
+    if (!map) return { setStart() {}, getStart: () => null, showLine() {}, clearLine() {} };
+    const goal = [Number(destination.latitud), Number(destination.longitud)];
+    L.marker(goal, { icon: markerIcon('B','#ef8d3c'), title: 'Lugar de recojo' }).addTo(map).bindTooltip('Lugar de recojo');
+    map.setView(goal, 14);
+    let pin = null, line = null, position = null;
+    function clearLine() { if (line) { line.remove(); line = null; } }
+    function setStart(lat, lng) {
+      if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+      position = { latitud: Number(lat), longitud: Number(lng) };
+      if (!pin) {
+        pin = L.marker([lat,lng], { draggable: true, icon: markerIcon('A','#087f5b'), title: 'Punto de salida' }).addTo(map).bindTooltip('Sales de aquí');
+        pin.on('dragend', () => { const point = pin.getLatLng(); setStart(point.lat, point.lng); });
+      } else pin.setLatLng([lat,lng]);
+      clearLine();
+      map.fitBounds(L.latLngBounds([goal, [lat,lng]]), { padding: [45,45], maxZoom: 16, animate: false });
+      onStart?.(position);
+    }
+    function showLine(geometry) {
+      clearLine();
+      line = L.geoJSON(geometry, { style: { color: '#087f5b', weight: 6, opacity: .9 } }).addTo(map);
+      map.fitBounds(line.getBounds(), { padding: [35,35], animate: false });
+    }
+    map.on('click', event => setStart(event.latlng.lat, event.latlng.lng));
+    if (start && Number.isFinite(Number(start.latitud)) && Number.isFinite(Number(start.longitud))) setStart(start.latitud, start.longitud);
+    return { setStart, getStart: () => position, showLine, clearLine };
+  }
+  window.REAMaps = { mountPicker, mountEta, search, showRoute, dispose };
 })();

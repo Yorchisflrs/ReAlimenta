@@ -39,7 +39,7 @@ async function createDonation(overrides = {}) {
   return result.data.data;
 }
 function request(overrides = {}) {
-  return { responsable_recojo: 'Responsable de prueba', telefono: '000000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString(), observaciones: 'Prueba automatizada.', ...overrides };
+  return { responsable_recojo: 'Responsable de prueba', telefono: '951000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString(), observaciones: 'Prueba automatizada.', ...overrides };
 }
 async function createRequest(donationId, account = accounts.organizacion, overrides = {}) {
   const result = await call('POST', `/api/donaciones/${donationId}/solicitudes`, request(overrides), account);
@@ -264,10 +264,15 @@ test('Seguridad: autenticación, roles, CSRF, Origin, páginas y archivos privad
 });
 
 test('Registro público: administrador prohibido, usuario pendiente, perfil pendiente y datos geográficos persistentes', async () => {
-  const payload = { nombre: 'Donante registrado de prueba', correo: 'nuevo@prueba.test', telefono: '000000000', rol: 'donante', contrasena: password, perfil: { nombre_establecimiento: 'Donante nuevo', direccion: 'Punto de prueba Puno', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', referencia: 'Frente al parque', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } };
+  const payload = { nombre: 'Donante registrado de prueba', correo: 'nuevo.donante@gmail.com', telefono: '951000000', rol: 'donante', contrasena: password, perfil: { nombre_establecimiento: 'Donante nuevo', direccion: 'Punto de prueba Puno', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', referencia: 'Frente al parque', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } };
   assert.equal((await call('POST', '/api/auth/register', { ...payload, rol: 'administrador' })).status, 422);
   assert.equal((await call('POST', '/api/auth/register', { ...payload, perfil: { ...payload.perfil, ubicacion_confirmada: false } })).status, 422);
   assert.equal((await call('POST', '/api/auth/register', { ...payload, telefono: '1'.repeat(21) })).status, 422);
+  // Reglas de Puno/Perú: correo Gmail o institucional .pe, teléfono peruano, nombre con letras y ubicación dentro de Puno.
+  for (const override of [{ correo: 'alguien@hotmail.com' }, { correo: 'alguien@empresa.com' }, { telefono: '95123456a' }, { telefono: '851234567' }, { nombre: 'Juan123 Pérez' }, { nombre: 'Juan' }, { contrasena: 'solamenteletras' },
+    { perfil: { ...payload.perfil, distrito: 'Miraflores' } }, { perfil: { ...payload.perfil, provincia: 'Lima' } }, { perfil: { ...payload.perfil, latitud: -12.04, longitud: -77.03 } }, { perfil: { ...payload.perfil, direccion: '12345' } }])
+    assert.equal((await call('POST', '/api/auth/register', { ...payload, ...override })).status, 422, JSON.stringify(override));
+  assert.equal((await call('POST', '/api/auth/register', { ...payload, correo: 'mesa.partes@unap.edu.pe', nombre: 'Ana Quispe Mamani', telefono: '051 365 000', perfil: { ...payload.perfil, provincia: 'San Román', distrito: 'Juliaca', latitud: -15.5, longitud: -70.13 } })).status, 201);
   const result = await call('POST', '/api/auth/register', payload);
   assert.equal(result.status, 201); assert.equal(result.data.data.estado_verificacion, 'pendiente');
   const user = await one('SELECT * FROM usuarios WHERE id_usuario = ?', [result.data.data.id_usuario]);
@@ -310,7 +315,7 @@ test('Donaciones: creación, consulta, filtro, detalle, edición y cancelación 
 });
 
 test('Donaciones: cantidad, cronología, coordenadas, tamaños y obligatorios inválidos producen 422 comprensible', async () => {
-  for (const override of [{ cantidad: 0 }, { cantidad: -1 }, { cantidad: 0.001 }, { alimento: '' }, { latitud_recojo: 95 }, { envase: 'x'.repeat(101) }, { conservacion_declarada: 'x'.repeat(101) }, { temperatura_declarada: 'x'.repeat(51) }, { fecha_limite_recojo: new Date(Date.now() - 1000).toISOString() }, { fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 60000).toISOString() }, { fecha_disponibilidad: '2026-01-01T10:00' }]) {
+  for (const override of [{ cantidad: 0 }, { cantidad: -1 }, { cantidad: 0.001 }, { alimento: '' }, { latitud_recojo: 95 }, { envase: 'x'.repeat(101) }, { conservacion_declarada: 'x'.repeat(101) }, { temperatura_declarada: 'x'.repeat(51) }, { fecha_limite_recojo: new Date(Date.now() - 1000).toISOString() }, { fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 60000).toISOString() }, { fecha_disponibilidad: '2026-01-01T10:00' }, { cantidad: 'diez' }, { cantidad: 250000 }, { alimento: '12345' }, { distrito: 'Miraflores' }, { latitud_recojo: -12.04, longitud_recojo: -77.03 }, { envase: '<b>caja</b>' }]) {
     const result = await call('POST', '/api/donaciones', donation(override), accounts.donante);
     assert.equal(result.status, 422, JSON.stringify(result.data));
     assert.ok(result.data.error.message.length > 10);
@@ -320,7 +325,7 @@ test('Donaciones: cantidad, cronología, coordenadas, tamaños y obligatorios in
 
 test('Propiedad: otro donante no puede leer, editar, cancelar ni aceptar donaciones ajenas', async () => {
   const hash = (await one("SELECT password_hash FROM usuarios WHERE correo = 'donante@realimenta.test'")).password_hash;
-  const second = await db.query("INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES ('Segundo donante', 'otro@realimenta.test', ?, '000000000', 'donante', 'activo')", [hash]);
+  const second = await db.query("INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES ('Segundo donante', 'otro@realimenta.test', ?, '951000000', 'donante', 'activo')", [hash]);
   await db.query("INSERT INTO donantes (id_usuario, nombre_establecimiento, direccion, distrito, latitud, longitud, estado_verificacion) VALUES (?, 'Otro donante', 'Punto público de prueba', 'Puno', -15.84, -70.02, 'verificado')", [second.insertId]);
   const other = await login('otro');
   const created = await createDonation();
@@ -347,7 +352,7 @@ test('Solicitudes: creación pendiente, datos anidados, recibidas por el donante
   const created = await createDonation({ requiere_cadena_frio: true });
   const req = await createRequest(created.id_donacion, accounts.organizacion, { dispone_cadena_frio: true });
   const stored = await one('SELECT * FROM solicitudes WHERE id_solicitud = ?', [req.id_solicitud]);
-  assert.equal(stored.estado, 'pendiente'); assert.equal(stored.telefono_recojo, '000000000'); assert.equal(stored.tipo_transporte, 'Vehículo de prueba');
+  assert.equal(stored.estado, 'pendiente'); assert.equal(stored.telefono_recojo, '951000000'); assert.equal(stored.tipo_transporte, 'Vehículo de prueba');
   assert.equal(stored.recipiente, 'Caja de prueba'); assert.equal(stored.cantidad_solicitada, 30); assert.ok(stored.fecha_recojo_propuesta);
   const orgList = (await call('GET', '/api/solicitudes', undefined, accounts.organizacion)).data.data;
   const found = orgList.find(s => s.id_solicitud === req.id_solicitud);
@@ -433,16 +438,17 @@ test('Vencimiento real del servidor impide nuevas solicitudes y registra histori
 
 test('Integridad referencial de MySQL rechaza solicitud huérfana', async () => {
   await assert.rejects(db.query(`INSERT INTO solicitudes (id_donacion, id_organizacion, responsable_recojo, telefono_recojo, tipo_transporte, recipiente, fecha_recojo_propuesta)
-    VALUES (2147483000, ?, 'Prueba', '000000000', 'Vehículo', 'Caja', NOW() + INTERVAL 1 HOUR)`, [accounts.organizacion.user.perfil.id_organizacion]), error => error.code === 'ER_NO_REFERENCED_ROW_2');
+    VALUES (2147483000, ?, 'Prueba', '951000000', 'Vehículo', 'Caja', NOW() + INTERVAL 1 HOUR)`, [accounts.organizacion.user.perfil.id_organizacion]), error => error.code === 'ER_NO_REFERENCED_ROW_2');
 });
 
-test('Sesiones y donaciones persisten al reiniciar instancia de aplicación; contenido XSS permanece texto JSON', async () => {
+test('Sesiones y donaciones persisten al reiniciar instancia de aplicación; contenido XSS se rechaza', async () => {
   const unsafeText = '<script>window.__xss=true</script>';
-  const created = await createDonation({ descripcion: unsafeText });
+  assert.equal((await call('POST', '/api/donaciones', donation({ descripcion: unsafeText }), accounts.donante)).status, 422);
+  const created = await createDonation({ descripcion: 'Texto con tildes y ñ: pan de anís.' });
   await new Promise(resolve => server.close(resolve));
   await listen();
   const detail = await call('GET', `/api/donaciones/${created.id_donacion}`, undefined, accounts.donante);
-  assert.equal(detail.status, 200); assert.equal(detail.data.data.descripcion, unsafeText);
+  assert.equal(detail.status, 200); assert.equal(detail.data.data.descripcion, 'Texto con tildes y ñ: pan de anís.');
   assert.match(detail.response.headers.get('content-type'), /application\/json/);
   const profile = await call('GET', '/api/auth/me', undefined, accounts.donante);
   assert.equal(profile.status, 200); assert.equal(profile.data.user.id_usuario, accounts.donante.user.id_usuario);

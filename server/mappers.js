@@ -15,7 +15,7 @@ export function splitAddress(value) {
 }
 
 // solicitudes no tiene columna booleana de cadena de frío: la declaración queda como mensaje al donante.
-export const COLD_CHAIN_MESSAGE = 'La organización declara medios para mantener la cadena de frío durante el traslado.';
+export const COLD_CHAIN_MESSAGE = 'La beneficiaria declara medios para mantener la cadena de frío durante el traslado.';
 export const coldChainDeclared = mensaje => typeof mensaje === 'string' && mensaje.startsWith(COLD_CHAIN_MESSAGE);
 
 export function parseDetail(value) {

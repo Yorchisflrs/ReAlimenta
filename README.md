@@ -21,6 +21,8 @@ Abrir **http://127.0.0.1:3000**. La aplicación la sirve Node, no Apache: si se 
 
 `db:check` debe mostrar **"Conexión a MySQL establecida correctamente"** y 13/13 tablas. El servidor hace la misma verificación al iniciar y no arranca si falta una tabla o columna; nunca ejecuta `CREATE`, `ALTER` ni `DROP`. En desarrollo también existe `GET /api/dev/conexion`, que responde el mismo mensaje sin revelar contraseña, usuario ni versión del servidor.
 
+Para crear la base con datos de ejemplo de una vez, importar [`db/realimenta_completa.sql`](db/realimenta_completa.sql) en phpMyAdmin (pestaña Importar) o con `mysql -u root < db/realimenta_completa.sql`. Crea la base `realimenta` con sus 13 tablas, las cuentas de demostración y donaciones de prueba; reemplaza esas tablas si ya existen. Las fotos de `uploads/` no se suben al repositorio, así que esas donaciones de ejemplo aparecerán sin imagen.
+
 Detalles del mapeo de columnas, fotografías, sesiones y decisiones de diseño: [Configuración MySQL](docs/Configuracion_MySQL.md).
 
 La interfaz utiliza tres [fondos locales nuevos y degradados](docs/Fondos_locales_y_seguimiento.md). La evaluación distingue la ida de la organización al punto de recojo del traslado del alimento al destino, conserva el tráfico elegido al reabrir y abre el seguimiento correcto al aceptar una solicitud. No se agregaron tablas ni columnas.
@@ -52,7 +54,7 @@ Los parámetros logísticos son demostrativos, no reglas sanitarias. Las fechas 
 
 ## Fotografías de donaciones
 
-Al publicar o editar una donación, el donante selecciona **hasta 5 fotos JPG, JPEG, PNG o WebP de máximo 5 MB cada una** y ve una vista previa. Al pulsar **Publicar donación** se guarda la donación en `donaciones`, se obtiene su ID y luego se envía cada foto. El servidor detecta el tipo real por la firma binaria (no confía en la extensión), rechaza SVG, GIF, ejecutables y documentos, elimina metadatos (EXIF/GPS), guarda el archivo como `uploads/donaciones/donacion_<id>_<aleatorio>.webp` y registra en `donacion_fotos` el nombre original, el nombre generado, la ruta relativa, el tipo MIME, el tamaño y si es la principal. Si MySQL o el disco fallan, no quedan archivos huérfanos ni registros parciales. Las fotos se muestran en Mis donaciones, en el catálogo y en el detalle, siempre desde MySQL, y solo a usuarios autorizados mediante `/media/donaciones/...`; Apache no puede servir ni ejecutar nada de `uploads/`.
+Al publicar o editar una donación, el donante selecciona **hasta 3 fotos (de frente, de costado y de cerca) JPG, JPEG, PNG o WebP de máximo 5 MB cada una** y ve una vista previa. Al pulsar **Publicar donación** se guarda la donación en `donaciones`, se obtiene su ID y luego se envía cada foto. El servidor detecta el tipo real por la firma binaria (no confía en la extensión), rechaza SVG, GIF, ejecutables y documentos, elimina metadatos (EXIF/GPS), guarda el archivo como `uploads/donaciones/donacion_<id>_<aleatorio>.webp` y registra en `donacion_fotos` el nombre original, el nombre generado, la ruta relativa, el tipo MIME, el tamaño y si es la principal. Si MySQL o el disco fallan, no quedan archivos huérfanos ni registros parciales. Las fotos se muestran en Mis donaciones, en el catálogo y en el detalle, siempre desde MySQL, y solo a usuarios autorizados mediante `/media/donaciones/...`; Apache no puede servir ni ejecutar nada de `uploads/`.
 
 ## Cuentas de demostración
 

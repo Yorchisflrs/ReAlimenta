@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { db, transaction, audit } from './db.js';
 import { config } from './config.js';
 import { fail } from './errors.js';
-import { text, profileInput } from './validation.js';
+import { text, profileInput, phone, personName, loginEmail, registrationEmail, password as passwordRule } from './validation.js';
 import { donorProfile, organizationProfile } from './mappers.js';
 
 const scrypt = promisify(scryptCallback);
@@ -139,18 +139,14 @@ function loginLimit(req) {
   if (++entry.count > 60) fail(429, 'TOO_MANY_ATTEMPTS', 'Demasiados intentos. Espere 15 minutos antes de reintentar.');
   if (attempts.size > 10000) for (const [k, v] of attempts) if (v.until < now) attempts.delete(k);
 }
-function passwordInput(value) {
-  if (typeof value !== 'string' || value.length < 12 || value.length > 128)
-    fail(422, 'INVALID_PASSWORD', 'La contraseña debe contener entre 12 y 128 caracteres.');
-  return value;
-}
+const passwordInput = passwordRule;
 const DUMMY_HASH = 'scrypt$16384$8$1$fb532b197b88147b5c4ab329a711f814$' + '00'.repeat(64);
 
 export const authRouter = Router();
 authRouter.get('/me', requireAuth, (req, res) => res.json({ user: req.user, csrfToken: req.csrfToken }));
 authRouter.post('/login', async (req, res) => {
   loginLimit(req);
-  const correo = text(req.body.correo, 'correo', 3, 254).toLowerCase();
+  const correo = loginEmail(req.body.correo);
   const password = typeof req.body.contrasena === 'string' && req.body.contrasena.length <= 128 ? req.body.contrasena : '';
   const row = (await db.query('SELECT * FROM usuarios WHERE correo = ?', [correo])).rows[0];
   // Ejecutar hash también para usuarios inexistentes reduce diferencias de tiempo observables.
@@ -170,12 +166,11 @@ authRouter.post('/logout', requireAuth, async (req, res) => {
 });
 authRouter.post('/register', async (req, res) => {
   loginLimit(req);
-  const nombre = text(req.body.nombre, 'nombre', 2, 150);
-  const correo = text(req.body.correo, 'correo', 5, 150).toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) fail(422, 'INVALID_EMAIL', 'Ingrese un correo válido.');
+  const nombre = personName(req.body.nombre, 'nombre');
+  const correo = registrationEmail(req.body.correo);
   const rol = req.body.rol;
-  if (!['donante', 'organizacion'].includes(rol)) fail(422, 'INVALID_ROLE', 'Solo se permite registro público de donantes u organizaciones.');
-  const telefono = text(req.body.telefono, 'teléfono', 6, 20);
+  if (!['donante', 'organizacion'].includes(rol)) fail(422, 'INVALID_ROLE', 'Solo se permite registro público de donantes o beneficiarias.');
+  const telefono = phone(req.body.telefono);
   const perfil = profileInput(req.body, rol);
   const hash = await hashPassword(passwordInput(req.body.contrasena));
   const result = await transaction(async client => {
