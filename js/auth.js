@@ -42,6 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   if (!register) return;
+  register.provincia.innerHTML = REARules.provinceOptions('Puno');
+  register.distrito.innerHTML = REARules.districtOptions('Puno', 'Puno');
   let role = new URLSearchParams(location.search).get('tipo') === 'organizacion' ? 'organizacion' : 'donante';
   let confirmed = false;
   let picker = null;
@@ -50,7 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
     role = value;
     roleInput.value = role;
     document.querySelectorAll('[data-register-role]').forEach(button => { button.classList.toggle('selected', button.dataset.registerRole === role); button.setAttribute('aria-pressed', String(button.dataset.registerRole === role)); });
-    document.querySelector('[data-entity-label]').textContent = role === 'donante' ? 'Nombre del establecimiento' : 'Nombre de la organización';
+    document.querySelector('[data-entity-label]').textContent = role === 'donante' ? 'Nombre de tu negocio' : 'Nombre de tu entidad beneficiaria';
+    register.entidad.placeholder = role === 'donante' ? 'Ej. Panadería San Juan' : 'Ej. Comedor Popular Virgen de la Candelaria';
   };
   document.querySelectorAll('[data-register-role]').forEach(button => button.addEventListener('click', () => selectRole(button.dataset.registerRole)));
   selectRole(role);
@@ -94,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
     if (!register.reportValidity()) return;
     if (register.contrasena.value !== register.confirmacion.value) { showMessage('Las contraseñas no coinciden.'); return; }
-    if (!confirmed || !register.latitud.value || !register.longitud.value) { showMessage('Selecciona y confirma la ubicación del establecimiento u organización en el mapa.'); return; }
+    if (!confirmed || !register.latitud.value || !register.longitud.value) { showMessage('Marca tu local en el mapa y marca la casilla que confirma que el punto es correcto.'); return; }
     const button = register.querySelector('[type="submit"]');
     button.disabled = true;
     button.textContent = 'Creando tu cuenta…';

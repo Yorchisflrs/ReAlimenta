@@ -25,7 +25,7 @@ export function evaluateLogistics(donation, route, input = {}, now = new Date())
     margen_seguridad_min: minutes(input.margen_seguridad_min, process.env.LOGISTICS_SAFETY_MIN || 15, 'El margen logístico'),
     umbral_verde_min: minutes(undefined, process.env.LOGISTICS_GREEN_MARGIN_MIN || 30, 'El umbral verde'),
     demora_trafico_min: minutes(input.demora_trafico_min, 0, 'La demora del escenario de tráfico'),
-    viaje_recojo_min: minutes(input.viaje_recojo_min, 0, 'El viaje de la organización al punto de recojo'),
+    viaje_recojo_min: minutes(input.viaje_recojo_min, 0, 'El viaje de la beneficiaria al punto de recojo'),
   };
   const moved = ['recogido', 'en_transito', 'entregado', 'confirmado'].includes(input.etapa_custodia);
   const arrived = ['entregado', 'confirmado'].includes(input.etapa_custodia);
@@ -230,6 +230,20 @@ export function createLogisticsRouter({ db, requireAuth }) {
     if (geocodeLimits.size > 1000) geocodeLimits.delete(geocodeLimits.keys().next().value);
     res.json({ data: await geocode(req.query.q) });
   });
+  // Estimación simple: solo punto de salida y punto de llegada; la hora de llegada la suma el navegador.
+  const estimateLimits = new Map();
+  router.post('/rutas/estimar', requireAuth, async (req, res) => {
+    const key = req.user.id_usuario;
+    let entry = estimateLimits.get(key);
+    if (!entry || entry.until < Date.now()) { entry = { count: 0, until: Date.now() + MINUTE }; estimateLimits.set(key, entry); }
+    if (++entry.count > 20) throw error(429, 'CONSULTAS_LIMITADAS', 'Hiciste muchos cálculos seguidos. Espera un minuto y vuelve a intentarlo.');
+    if (estimateLimits.size > 1000) estimateLimits.delete(estimateLimits.keys().next().value);
+    const origin = { latitud: req.body.origen?.latitud, longitud: req.body.origen?.longitud };
+    const destination = { latitud: req.body.destino?.latitud, longitud: req.body.destino?.longitud };
+    if (!validCoordinates(origin.latitud, origin.longitud) || !validCoordinates(destination.latitud, destination.longitud)) throw error(422, 'COORDENADAS_INVALIDAS', 'Marca en el mapa desde dónde sales.');
+    const route = await calculateRoute(origin, destination);
+    res.json({ data: { geometry: route.geometry, distancia_km: route.distancia_km, duracion_estimada_min: route.duracion_estimada_min, proveedor: route.proveedor } });
+  });
   router.post('/donaciones/:id/evaluacion', requireAuth, async (req, res) => {
     const found = (await db.query('SELECT d.*, dt.* FROM donaciones d JOIN donantes dt ON dt.id_donante = d.id_donante WHERE d.id_donacion = ?', [id(req.params.id)], { nestTables: true })).rows[0];
     if (!found) throw error(404, 'NO_ENCONTRADO', 'La donación no existe.');
@@ -244,9 +258,9 @@ export function createLogisticsRouter({ db, requireAuth }) {
       const ownRequest = req.body.id_solicitud
         ? (await db.query('SELECT * FROM solicitudes WHERE id_donacion = ? AND id_organizacion = ? AND id_solicitud = ?', [donation.id_donacion, orgId, id(req.body.id_solicitud)])).rows[0]
         : (await db.query('SELECT * FROM solicitudes WHERE id_donacion = ? AND id_organizacion = ? ORDER BY fecha_solicitud DESC, id_solicitud DESC LIMIT 1', [donation.id_donacion, orgId])).rows[0];
-      if (req.body.id_solicitud && !ownRequest) throw error(403, 'PROHIBIDO', 'La solicitud no pertenece a su organización.');
+      if (req.body.id_solicitud && !ownRequest) throw error(403, 'PROHIBIDO', 'La solicitud no pertenece a su entidad beneficiaria.');
       const donorEligible = (await db.query(`SELECT 1 FROM donantes d JOIN usuarios u ON u.id_usuario = d.id_usuario WHERE d.id_donante = ? AND d.estado_verificacion = 'verificado' AND ${eligibleUser}`, [donation.id_donante])).rowCount > 0;
-      if (!ownRequest && (donation.estado !== 'disponible' || Date.parse(donation.fecha_limite_recojo) <= Date.now() || !donorEligible)) throw error(403, 'PROHIBIDO', 'Esta donación no está disponible para su organización.');
+      if (!ownRequest && (donation.estado !== 'disponible' || Date.parse(donation.fecha_limite_recojo) <= Date.now() || !donorEligible)) throw error(403, 'PROHIBIDO', 'Esta donación no está disponible para su entidad beneficiaria.');
       if (ownRequest) { requestId = ownRequest.id_solicitud; input.fecha_propuesta ||= ownRequest.fecha_recojo_propuesta; }
     } else if (['donante', 'administrador'].includes(req.user.rol)) {
       if (req.user.rol === 'donante' && String(donation.id_donante) !== String(req.user.perfil?.id_donante)) throw error(403, 'PROHIBIDO', 'Solo puede consultar rutas de sus propias donaciones.');
@@ -258,9 +272,9 @@ export function createLogisticsRouter({ db, requireAuth }) {
         input.fecha_propuesta = request.s.fecha_recojo_propuesta;
         if (typeof input.dispone_cadena_frio !== 'boolean') input.dispone_cadena_frio = coldChainDeclared(request.s.mensaje);
       } else {
-        if (!req.body.id_organizacion) throw error(422, 'SOLICITUD_REQUERIDA', 'Seleccione una organización de destino o una solicitud para evaluar el recorrido.');
+        if (!req.body.id_organizacion) throw error(422, 'SOLICITUD_REQUERIDA', 'Seleccione una beneficiaria de destino o una solicitud para evaluar el recorrido.');
         organization = organizationProfile((await db.query(`SELECT o.* FROM organizaciones o JOIN usuarios u ON u.id_usuario = o.id_usuario WHERE o.id_organizacion = ? AND o.estado_verificacion = 'verificado' AND ${eligibleUser}`, [id(req.body.id_organizacion)])).rows[0]);
-        if (!organization) throw error(422, 'DESTINO_INVALIDO', 'Seleccione una organización verificada.');
+        if (!organization) throw error(422, 'DESTINO_INVALIDO', 'Seleccione una beneficiaria verificada.');
       }
     } else throw error(403, 'PROHIBIDO', 'El rol no permite evaluar esta ruta.');
     if(requestId){
@@ -280,7 +294,7 @@ export function createLogisticsRouter({ db, requireAuth }) {
     }
     input.viaje_recojo_min = pickupRoute?.duracion_estimada_min || 0;
     const evaluation = evaluateLogistics(donation, route, input);
-    if (!route) evaluation.advertencias.push('Confirme las coordenadas del donante y la organización en sus perfiles.');
+    if (!route) evaluation.advertencias.push('Confirme las coordenadas del donante y la beneficiaria en sus perfiles.');
     await saveEvaluation(db, { donationId: donation.id_donacion, organizationId: organization?.id_organizacion, requestId, origin, destination: organization, route, pickupRoute, evaluation, actorId: req.user.id_usuario, input });
     res.json({ data: { ruta: route, ruta_recojo: pickupRoute, evaluacion: evaluation,
       origen: { ...origin, nombre: donation.donante_nombre || found.dt.nombre_establecimiento, direccion: donation.direccion_recojo },

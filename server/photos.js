@@ -10,7 +10,8 @@ import { id } from './validation.js';
 import { fail } from './errors.js';
 import { photoFromRow } from './mappers.js';
 
-export const MAX_PHOTOS = 5;
+// Tres fotos por donación: de frente, de costado y de cerca.
+export const MAX_PHOTOS = 3;
 const MAX_BYTES = 5 * 1024 * 1024;
 const directory = config.uploadsDir;
 const DECLARED = { 'image/jpeg': 'image/jpeg', 'image/jpg': 'image/jpeg', 'image/pjpeg': 'image/jpeg', 'image/png': 'image/png', 'image/webp': 'image/webp' };
@@ -92,7 +93,7 @@ photoRouter.post('/donaciones/:id/foto', requireAuth, requireRole('donante'), as
     const photo = await transaction(async client => {
       const d = await canEdit(req.user, donationId, client, true);
       const total = Number((await client.query('SELECT COUNT(*) AS total FROM donacion_fotos WHERE id_donacion = ?', [d.id_donacion])).rows[0].total);
-      if (total >= MAX_PHOTOS) fail(409, 'PHOTO_LIMIT', `Cada donación admite hasta ${MAX_PHOTOS} fotografías.`);
+      if (total >= MAX_PHOTOS) fail(409, 'PHOTO_LIMIT', `Cada donación lleva ${MAX_PHOTOS} fotos: de frente, de costado y de cerca. Ya están completas.`);
       await mkdir(directory, { recursive: true });
       await writeFile(destination, result.data, { flag: 'wx' });
       written = true;

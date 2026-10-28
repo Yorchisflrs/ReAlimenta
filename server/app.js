@@ -12,6 +12,7 @@ import { createLogisticsRouter } from './logistics.js';
 import { custodyRouter } from './custody.js';
 import { photoRouter,mediaRouter } from './photos.js';
 import { recoveryRouter } from './recovery.js';
+import { browserScript } from './puno.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export { pool };
@@ -84,8 +85,12 @@ export function createApp() {
   }
   app.get('/', (req, res) => res.sendFile(path.join(root, 'index.html')));
   for (const name of ['index.html', 'login.html', 'registro.html','recuperar.html']) app.get(`/${name}`, (req, res) => res.sendFile(path.join(root, name)));
+  // Catálogo de provincias/distritos y patrones de validación, generado desde server/puno.js.
+  app.get('/js/puno.js', (req, res) => res.type('application/javascript').send(browserScript()));
   for (const directory of ['assets', 'css', 'js']) app.use(`/${directory}`, express.static(path.join(root, directory), { dotfiles: 'deny', index: false }));
   app.use('/vendor/leaflet', express.static(path.join(root, 'node_modules/leaflet/dist'), { dotfiles: 'deny', index: false }));
+  // Generación del comprobante PDF en el navegador (la CSP solo admite scripts propios).
+  app.get('/vendor/jspdf/jspdf.umd.min.js', (req, res) => res.sendFile(path.join(root, 'node_modules/jspdf/dist/jspdf.umd.min.js')));
   app.use((req, res) => res.status(404).type('text').send('No se encontró esta página.'));
   app.use(errorHandler);
   return app;

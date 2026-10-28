@@ -3,7 +3,7 @@ import { db, transaction, audit, placeholders } from './db.js';
 import { config } from './config.js';
 import { requireAuth, requireRole, requireVerified, userFromRow, publicUser, canSignIn, isDemoEmail } from './auth.js';
 import { fail } from './errors.js';
-import { id, text, optionalText, date, donationInput, profileInput, bool } from './validation.js';
+import { id, text, optionalText, date, donationInput, profileInput, bool, phone, personName, words, optionalWords } from './validation.js';
 import { createTracking, custodySummaries } from './custody.js';
 import { evaluateLogistics, routeFromEvaluation, attachEvaluationDetails, pickupFromEvaluation, evaluationMatches } from './logistics.js';
 import { attachPhotos } from './photos.js';
@@ -13,7 +13,7 @@ import {
 } from './mappers.js';
 
 const ELIGIBLE_USER = "u.estado IN ('activo','pendiente')";
-// Catálogo de organizaciones: nunca muestra donaciones canceladas, finalizadas, expiradas ni fuera de plazo.
+// Catálogo de beneficiarias: nunca muestra donaciones canceladas, finalizadas, expiradas ni fuera de plazo.
 const CATALOG = `d.estado = 'disponible' AND d.fecha_limite_recojo > NOW()
   AND (d.fecha_limite_aprovechamiento IS NULL OR d.fecha_limite_aprovechamiento > NOW())
   AND dt.estado_verificacion = 'verificado' AND ${ELIGIBLE_USER}`;
@@ -242,13 +242,13 @@ businessRouter.get('/solicitudes', async (req, res) => {
 businessRouter.post('/donaciones/:id/solicitudes', requireRole('organizacion'), async (req, res) => {
   requireVerified(req);
   const value = {
-    responsable_recojo: text(req.body.responsable_recojo, 'responsable de recojo', 2, 150),
-    telefono: text(req.body.telefono, 'teléfono', 6, 20),
-    transporte_declarado: text(req.body.transporte_declarado, 'transporte declarado', 2, 100),
-    recipiente_declarado: text(req.body.recipiente_declarado, 'recipiente declarado', 2, 100),
+    responsable_recojo: personName(req.body.responsable_recojo, 'nombre de quien recoge'),
+    telefono: phone(req.body.telefono),
+    transporte_declarado: words(req.body.transporte_declarado, 'transporte', 2, 100),
+    recipiente_declarado: words(req.body.recipiente_declarado, 'recipiente', 2, 100),
     dispone_cadena_frio: bool(req.body.dispone_cadena_frio ?? false, 'dispone_cadena_frio'),
     fecha_propuesta: date(req.body.fecha_propuesta, 'fecha propuesta'),
-    observaciones: optionalText(req.body.observaciones, 'observaciones')
+    observaciones: optionalWords(req.body.observaciones, 'observaciones')
   };
   await expireDonations();
   const requestId = await transaction(async client => {
@@ -271,7 +271,7 @@ businessRouter.post('/donaciones/:id/solicitudes', requireRole('organizacion'), 
     const previous = (await client.query('SELECT id_solicitud, estado FROM solicitudes WHERE id_donacion = ? AND id_organizacion = ? FOR UPDATE', [donation.id_donacion, organizationId])).rows[0];
     let requestId;
     if (previous) {
-      if (ACTIVE_REQUEST_STATES.includes(previous.estado)) fail(409, 'REQUEST_EXISTS', 'Tu organización ya tiene una solicitud activa para esta donación.');
+      if (ACTIVE_REQUEST_STATES.includes(previous.estado)) fail(409, 'REQUEST_EXISTS', 'Tu entidad beneficiaria ya tiene una solicitud activa para esta donación.');
       await client.query(`UPDATE solicitudes SET ${entries.map(([key]) => `${key} = ?`).join(', ')}, estado = 'pendiente', fecha_solicitud = CURRENT_TIMESTAMP
         WHERE id_solicitud = ?`, [...entries.map(([, v]) => v), previous.id_solicitud]);
       requestId = previous.id_solicitud;
@@ -283,7 +283,7 @@ businessRouter.post('/donaciones/:id/solicitudes', requireRole('organizacion'), 
       await audit(client, req.user.id_usuario, 'solicitudes', requestId, 'crear', { id_donacion: donation.id_donacion, cadena_frio_declarada: value.dispone_cadena_frio });
     }
     await client.query("INSERT INTO seguimientos (id_donacion, id_usuario, etapa, responsable, observaciones) VALUES (?, ?, 'solicitud_recibida', ?, ?)",
-      [donation.id_donacion, req.user.id_usuario, String(req.user.perfil.nombre || '').slice(0, 150), `Solicitud #${requestId} registrada por la organización.`]);
+      [donation.id_donacion, req.user.id_usuario, String(req.user.perfil.nombre || '').slice(0, 150), `Solicitud #${requestId} registrada por la beneficiaria.`]);
     return requestId;
   });
   const row = (await db.query('SELECT * FROM solicitudes WHERE id_solicitud = ?', [requestId])).rows[0];
@@ -306,7 +306,7 @@ for (const action of ['aceptar', 'rechazar', 'cancelar']) {
       if (request.id_donacion !== donation.id_donacion || (indicated && indicated !== request.id_donacion))
         fail(409, 'REQUEST_DONATION_MISMATCH', 'La solicitud no pertenece a la donación indicada.');
       if (action === 'cancelar') {
-        if (request.id_organizacion !== req.user.perfil?.id_organizacion) fail(403, 'NOT_OWNER', 'Solo la organización solicitante puede cancelar su solicitud.');
+        if (request.id_organizacion !== req.user.perfil?.id_organizacion) fail(403, 'NOT_OWNER', 'Solo la beneficiaria solicitante puede cancelar su solicitud.');
       } else donationOwner(req, donation);
       if (!PENDING_REQUEST_STATES.includes(request.estado)) fail(409, 'INVALID_STATE', 'Solo se pueden modificar solicitudes pendientes.');
       if (action !== 'cancelar') checkAvailable(donation);
@@ -341,8 +341,8 @@ for (const action of ['aceptar', 'rechazar', 'cancelar']) {
 
 businessRouter.get('/perfil', (req, res) => res.json({ data: { usuario: publicUser(req.user), perfil: req.user.perfil } }));
 businessRouter.patch('/perfil', async (req, res) => {
-  const nombre = text(req.body.nombre ?? req.user.nombre, 'nombre', 2, 150);
-  const telefono = text(req.body.telefono ?? req.user.telefono, 'teléfono', 6, 20);
+  const nombre = personName(req.body.nombre ?? req.user.nombre, 'nombre');
+  const telefono = phone(req.body.telefono ?? req.user.telefono);
   const result = await transaction(async client => {
     let changedLocation = false;
     if (req.user.rol !== 'administrador') {

@@ -11,8 +11,8 @@ const resetDemo = process.argv.includes('--restablecer-demo');
 // Ninguna cuenta representa a la institución o al comercio que opere cerca de estos puntos.
 const accounts = [
   { correo: 'donante@realimenta.test', nombre: 'Donante de demostración', rol: 'donante', perfil: { nombre_establecimiento: 'Panadería San Carlos · DEMO', direccion: 'Punto público demostrativo: Catedral Basílica San Carlos Borromeo, Jirón Deustua, Puno', distrito: 'Puno', latitud: -15.840908, longitud: -70.0289581 } },
-  { correo: 'organizacion@realimenta.test', nombre: 'Organización de demostración', rol: 'organizacion', perfil: { nombre: 'Comedor Esperanza · DEMO', responsable: 'Responsable de demostración', direccion: 'Punto público demostrativo: Parque Pino, Puno', distrito: 'Puno', latitud: -15.8377634, longitud: -70.0280229 } },
-  { correo: 'organizacion2@realimenta.test', nombre: 'Segunda organización de demostración', rol: 'organizacion', perfil: { nombre: 'Red Solidaria · DEMO', responsable: 'Segundo responsable de demostración', direccion: 'Punto público demostrativo: Parque Pino, Puno (segunda cuenta de prueba)', distrito: 'Puno', latitud: -15.8377634, longitud: -70.0280229 } },
+  { correo: 'organizacion@realimenta.test', nombre: 'Beneficiaria de demostración', rol: 'organizacion', perfil: { nombre: 'Comedor Esperanza · DEMO', responsable: 'Responsable de demostración', direccion: 'Punto público demostrativo: Parque Pino, Puno', distrito: 'Puno', latitud: -15.8377634, longitud: -70.0280229 } },
+  { correo: 'organizacion2@realimenta.test', nombre: 'Segunda beneficiaria de demostración', rol: 'organizacion', perfil: { nombre: 'Red Solidaria · DEMO', responsable: 'Segundo responsable de demostración', direccion: 'Punto público demostrativo: Parque Pino, Puno (segunda cuenta de prueba)', distrito: 'Puno', latitud: -15.8377634, longitud: -70.0280229 } },
   { correo: 'admin@realimenta.test', nombre: 'Administrador de demostración', rol: 'administrador' }
 ];
 const items = [
@@ -32,7 +32,7 @@ try {
         summary.cuentas_existentes++;
         if (resetDemo) await client.query("UPDATE usuarios SET password_hash = ?, estado = 'activo' WHERE id_usuario = ?", [hash, user.id_usuario]);
       } else {
-        const created = await client.query("INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES (?, ?, ?, '000000000', ?, 'activo')", [account.nombre, account.correo, hash, account.rol]);
+        const created = await client.query("INSERT INTO usuarios (nombres, correo, password_hash, telefono, rol, estado) VALUES (?, ?, ?, '951000000', ?, 'activo')", [account.nombre, account.correo, hash, account.rol]);
         user = { id_usuario: created.insertId };
         summary.cuentas_creadas++;
         await audit(client, user.id_usuario, 'usuarios', user.id_usuario, 'semilla_demostracion', { verificacion: 'Perfil de prueba previamente verificado por semilla; no constituye una verificación administrativa real.' });
