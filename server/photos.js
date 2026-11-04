@@ -8,7 +8,7 @@ import { config } from './config.js';
 import { requireAuth, requireRole, requireVerified, canSignIn } from './auth.js';
 import { id } from './validation.js';
 import { fail } from './errors.js';
-import { photoFromRow } from './mappers.js';
+import { photoFromRow, LOCAL_PHOTO_FILE } from './mappers.js';
 
 // Tres fotos por donación: de frente, de costado y de cerca.
 export const MAX_PHOTOS = 3;
@@ -27,6 +27,82 @@ export function sniffImage(buffer) {
   return null;
 }
 const declaredType = req => DECLARED[(req.get('content-type') || '').split(';')[0].trim().toLowerCase()];
+
+async function toWebp(buffer, detected) {
+  try {
+    const image = sharp(buffer, { limitInputPixels: 25000000, failOn: 'error', animated: false });
+    const meta = await image.metadata();
+    if (meta.format !== SHARP_FORMAT[detected] || Number(meta.pages || 1) > 1) fail(422, 'PHOTO_INVALID', 'El contenido no corresponde a una fotografía admitida.');
+    // Recodificar a WebP elimina metadatos (EXIF/GPS) y cualquier contenido incrustado que no sea imagen.
+    return await image.rotate().resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true }).webp({ quality: 84 }).toBuffer({ resolveWithObject: true });
+  } catch (error) {
+    if (error.code === 'PHOTO_INVALID') throw error;
+    fail(422, 'PHOTO_INVALID', 'No se pudo leer la foto. Usa JPG, PNG o WebP válido, de hasta 5 MB y 25 megapíxeles.');
+  }
+}
+
+// Foto de fachada o logo enviada en el registro como { tipo, datos } (datos en base64).
+// Se guarda junto a las fotos de donaciones, en uploads/locales, y la columna foto_local conserva su ruta.
+const localsDirectory = path.join(path.dirname(directory), 'locales');
+export async function saveLocalPhoto(foto) {
+  if (!foto || typeof foto.datos !== 'string' || !foto.datos) fail(422, 'LOCAL_PHOTO_REQUIRED', 'Sube una foto de la fachada de tu local o de tu logo.');
+  const declared = DECLARED[String(foto.tipo || '').toLowerCase()];
+  if (!declared) fail(415, 'PHOTO_TYPE', 'Selecciona una foto JPG, JPEG, PNG o WebP. No se admiten SVG, GIF, ejecutables ni documentos.');
+  const buffer = Buffer.from(foto.datos, 'base64');
+  if (!buffer.length || buffer.length > MAX_BYTES) fail(422, 'PHOTO_SIZE', 'La foto debe pesar como máximo 5 MB.');
+  const detected = sniffImage(buffer);
+  if (!detected || detected !== declared) fail(422, 'PHOTO_INVALID', 'El contenido del archivo no corresponde a una fotografía JPG, PNG o WebP.');
+  const result = await toWebp(buffer, detected);
+  const destination = path.join(localsDirectory, `local_${randomBytes(8).toString('hex')}.webp`);
+  await mkdir(localsDirectory, { recursive: true });
+  await writeFile(destination, result.data, { flag: 'wx' });
+  return { destination, relativePath: localRelativePath(destination) };
+}
+const localRelativePath = destination => path.relative(config.root, destination).split(path.sep).join('/');
+// Borra una foto de perfil reemplazada; solo actúa dentro de uploads/locales.
+export async function removeLocalPhoto(relativePath) {
+  const file = String(relativePath || '').split('/').pop();
+  if (!LOCAL_PHOTO_FILE.test(file)) return;
+  await unlink(path.join(localsDirectory, file)).catch(error => { if (error.code !== 'ENOENT') console.error('No se pudo eliminar la foto de perfil anterior:', error.message); });
+}
+
+// Archivos de una donación eliminada (después de borrar sus filas).
+export async function removeDonationFiles(names) {
+  for (const name of names) {
+    if (!PHOTO_FILE.test(name)) continue;
+    await unlink(path.join(directory, name)).catch(error => { if (error.code !== 'ENOENT') console.error('No se pudo eliminar la fotografía de la donación:', error.message); });
+  }
+}
+
+// Fotos de perfil: cada usuario ve la suya; el donante ve la de las beneficiarias que le solicitaron,
+// y la beneficiaria ve la de los donantes de su catálogo o de las donaciones que solicitó.
+export const localMediaRouter = Router();
+localMediaRouter.use(requireAuth);
+localMediaRouter.get('/:archivo', async (req, res) => {
+  const file = req.params.archivo;
+  if (!LOCAL_PHOTO_FILE.test(file)) fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
+  const stored = localRelativePath(path.join(localsDirectory, file));
+  const donor = (await db.query('SELECT id_donante, id_usuario FROM donantes WHERE foto_local = ?', [stored])).rows[0];
+  const organization = donor ? null : (await db.query('SELECT id_organizacion, id_usuario FROM organizaciones WHERE foto_local = ?', [stored])).rows[0];
+  const owner = donor || organization;
+  if (!owner) fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
+  const user = req.user;
+  let allowed = user.rol === 'administrador' || user.id_usuario === owner.id_usuario;
+  if (!allowed && donor && user.rol === 'organizacion') {
+    allowed = (await db.query(`SELECT 1 FROM donaciones d JOIN donantes dt ON dt.id_donante = d.id_donante JOIN usuarios u ON u.id_usuario = dt.id_usuario
+      WHERE d.id_donante = ? AND ((d.estado = 'disponible' AND d.fecha_limite_recojo > NOW() AND dt.estado_verificacion = 'verificado' AND u.estado IN ('activo','pendiente'))
+        OR EXISTS (SELECT 1 FROM solicitudes s WHERE s.id_donacion = d.id_donacion AND s.id_organizacion = ?)) LIMIT 1`, [donor.id_donante, user.perfil?.id_organizacion || -1])).rowCount > 0;
+  }
+  if (!allowed && organization && user.rol === 'donante') {
+    allowed = (await db.query(`SELECT 1 FROM solicitudes s JOIN donaciones d ON d.id_donacion = s.id_donacion
+      WHERE s.id_organizacion = ? AND d.id_donante = ? LIMIT 1`, [organization.id_organizacion, user.perfil?.id_donante || -1])).rowCount > 0;
+  }
+  if (!allowed) fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
+  res.set({ 'Cache-Control': 'private, no-cache', 'Content-Type': 'image/webp', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': 'inline' });
+  res.sendFile(path.join(localsDirectory, file), { dotfiles: 'allow' }, error => {
+    if (error && !res.headersSent) res.status(404).json({ error: { code: 'PHOTO_FILE_MISSING', message: 'La fotografía no está disponible en el almacenamiento local.' } });
+  });
+});
 
 export async function attachPhotos(donations, client = db) {
   const list = donations.filter(Boolean);
@@ -70,17 +146,7 @@ photoRouter.post('/donaciones/:id/foto', requireAuth, requireRole('donante'), as
   if (!Buffer.isBuffer(req.body) || !req.body.length) fail(422, 'PHOTO_EMPTY', 'Selecciona una fotografía antes de subirla.');
   const declared = declaredType(req), detected = sniffImage(req.body);
   if (!detected || detected !== declared) fail(422, 'PHOTO_INVALID', 'El contenido del archivo no corresponde a una fotografía JPG, PNG o WebP.');
-  let result;
-  try {
-    const image = sharp(req.body, { limitInputPixels: 25000000, failOn: 'error', animated: false });
-    const meta = await image.metadata();
-    if (meta.format !== SHARP_FORMAT[detected] || Number(meta.pages || 1) > 1) fail(422, 'PHOTO_INVALID', 'El contenido no corresponde a una fotografía admitida.');
-    // Recodificar a WebP elimina metadatos (EXIF/GPS) y cualquier contenido incrustado que no sea imagen.
-    result = await image.rotate().resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true }).webp({ quality: 84 }).toBuffer({ resolveWithObject: true });
-  } catch (error) {
-    if (error.code === 'PHOTO_INVALID') throw error;
-    fail(422, 'PHOTO_INVALID', 'No se pudo leer la foto. Usa JPG, PNG o WebP válido, de hasta 5 MB y 25 megapíxeles.');
-  }
+  const result = await toWebp(req.body, detected);
   let original = 'fotografia';
   try { original = decodeURIComponent(req.get('x-file-name') || 'fotografia').replace(/[\u0000-\u001f\u007f]/g, '').replace(/^.*[\\/]/, '').slice(0, 255) || 'fotografia'; }
   catch { fail(422, 'PHOTO_NAME', 'El nombre del archivo no se pudo interpretar.'); }

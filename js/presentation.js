@@ -8,7 +8,7 @@
   function key(d){
     if(keys.includes(d.imagen_clave))return d.imagen_clave;
     const s=`${d.alimento||''} ${d.categoria||''}`.toLocaleLowerCase('es');
-    return /galleta/.test(s)?'galletas':/pan/.test(s)?'pan':/yogu/.test(s)?'yogur':/leche|lácte/.test(s)?'leche':/arroz|abarrote/.test(s)?'arroz':/salsa|tomate/.test(s)?'salsa':/ensalada/.test(s)?'ensalada':/crema|sopa|preparad/.test(s)?'sopa':/verd|hortal/.test(s)?'verduras':'fruta';
+    return /galleta/.test(s)?'galletas':/pan/.test(s)?'pan':/yogu/.test(s)?'yogur':/leche|lácte/.test(s)?'leche':/arroz|abarrote/.test(s)?'arroz':/salsa|tomate|conserva|enlatad/.test(s)?'salsa':/carne|pescad|huevo/.test(s)?'sopa':/ensalada/.test(s)?'ensalada':/crema|sopa|preparad/.test(s)?'sopa':/verd|hortal/.test(s)?'verduras':'fruta';
   }
   function photo(d){
     const url=d.fotos?.[0]?.url;
@@ -37,17 +37,6 @@
       }
       const address=document.createElement('p');address.className='card-address';address.innerHTML=`<i class="fa-solid fa-location-dot" aria-hidden="true"></i><span>${esc(d.direccion_recojo)}</span>`;
       body.querySelector('.donation-by').after(address);
-      const plan=state.evaluations.get(String(d.id_donacion))||d.plan_ruta;
-      const badge=card.querySelector('.mini-feasibility');
-      if(plan?.ruta){
-        const row=document.createElement('div');row.className='card-route-preview';
-        row.innerHTML=`<div><i class="fa-solid fa-route"></i><strong>${num(plan.ruta.distancia_km)} km</strong><span>${num(plan.ruta.duracion_estimada_min)} min base</span></div><small>Hasta ${esc(plan.destino?.nombre||state.profile.nombre||'beneficiaria evaluada')} · sin tráfico en vivo</small>`;
-        badge.before(row);
-        const tone=plan.evaluacion.estado_viabilidad;
-        badge.className=`mini-feasibility ${['verde','amarillo','rojo','gris'].includes(tone)?tone:'gris'}`;
-        const words={verde:'Margen de tiempo suficiente',amarillo:'Margen reducido · revisar',rojo:'No viable · requiere revisión',gris:d.requiere_cadena_frio?'Confirma los medios de cadena de frío':'Faltan datos para evaluar'};
-        badge.innerHTML=`<span></span>${words[tone]||words.gris}`;
-      } else badge.innerHTML='<span></span>Abre la ruta para evaluar este traslado';
       const mini=document.createElement('small');mini.className='declared-deadline';mini.textContent='Tiempo hasta el límite declarado; no garantiza aptitud de consumo.';body.querySelector('.card-time').after(mini);
     });
     root.querySelectorAll('.mvp-request-card').forEach(card=>{
@@ -68,9 +57,9 @@
     const from=origin?.nombre||origin?.direccion||'Establecimiento donante',to=destination?.nombre||destination?.direccion||'Beneficiaria';
     return `<div class="journey-legs"><article class="journey-leg ${!pickup?'completed':''}" data-journey-leg="recojo"><span><i class="fa-solid fa-car-side"></i> 1 · Ir al punto de recojo</span><strong>${pickup?`${num(pickup.distancia_km)} km · ${num(pickup.duracion_estimada_min)} min`:'Recojo ya registrado'}</strong><p>${esc(to)} → ${esc(from)}</p><small>${pickup?'Ida por carretera; se incluye en el tiempo total antes del recojo.':'El viaje de ida ya no se vuelve a sumar.'}</small></article><article class="journey-leg" data-journey-leg="entrega"><span><i class="fa-solid fa-box"></i> 2 · Trasladar los alimentos</span><strong>${num(result.ruta.distancia_km)} km · ${num(result.ruta.duracion_estimada_min)} min</strong><p>${esc(from)} → ${esc(to)}</p><small>Ruta base mostrada en el mapa. La demora elegida se suma a este traslado.</small></article></div>`;
   }
-  // Detalle: foto principal y galería por ángulo. El cálculo de llegada lo hace mvp.js con el mapa simple.
+  // Detalle: foto principal y galería por ángulo.
   function routeForm(root,state){
-    const form=root.querySelector('#eta-form');if(!form||form.dataset.enhanced)return;
+    const form=root.querySelector('.detail-summary');if(!form||form.dataset.enhanced)return;
     form.dataset.enhanced='true';
     const selected=state.selected;
     const description=root.querySelector('.detail-summary>p');if(description)description.textContent=description.textContent.replace(/^\[DEMO:(?:SEED|PRESENTACION):[A-Z_]+\]\s*/,'');
@@ -90,7 +79,7 @@
     const d=form.dataset.id?state.selected:{};
     REAImages.mount(form,d||{});
     // El perfil del alimento se deduce de la categoría para no pedir dos veces lo mismo al donante.
-    const byCategory={'Panadería':'panaderia','Frutas':'frutas','Verduras':'hortalizas','Lácteos':'refrigerado','Alimentos preparados':'preparado','Abarrotes':'seco'};
+    const byCategory={'Panadería y complementos':'panaderia','Verduras, tubérculos y frutas':'hortalizas','Lácteos y derivados':'refrigerado','Carnes, pescados y huevos':'refrigerado','Alimentos preparados':'preparado','Abarrotes y alimentos secos':'seco','Conservas y enlatados':'seco'};
     const profile=document.createElement('input');profile.type='hidden';profile.name='perfil_alimento';profile.value=d?.perfil_alimento||byCategory[form.categoria.value]||'general';form.append(profile);
     form.categoria.addEventListener('change',()=>{profile.value=byCategory[form.categoria.value]||'general';});
   }

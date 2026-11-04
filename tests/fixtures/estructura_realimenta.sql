@@ -115,6 +115,8 @@ CREATE TABLE `donantes` (
   `longitud` decimal(10,7) DEFAULT NULL,
   `estado_verificacion` enum('pendiente','verificado','rechazado') DEFAULT 'pendiente',
   `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp(),
+  `dni_representante` char(8) DEFAULT NULL,
+  `foto_local` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id_donante`),
   UNIQUE KEY `id_usuario` (`id_usuario`),
   CONSTRAINT `donantes_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
@@ -231,6 +233,8 @@ CREATE TABLE `organizaciones` (
   `longitud` decimal(10,7) DEFAULT NULL,
   `estado_verificacion` enum('pendiente','verificado','rechazado') DEFAULT 'pendiente',
   `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp(),
+  `dni_representante` char(8) DEFAULT NULL,
+  `foto_local` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id_organizacion`),
   UNIQUE KEY `id_usuario` (`id_usuario`),
   CONSTRAINT `organizaciones_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
@@ -269,6 +273,7 @@ CREATE TABLE `solicitudes` (
   `observaciones` text DEFAULT NULL,
   `estado` enum('pendiente','en_revision','aceptada','rechazada','cancelada') DEFAULT 'pendiente',
   `fecha_solicitud` timestamp NOT NULL DEFAULT current_timestamp(),
+  `tiempo_llegada_min` smallint(5) unsigned DEFAULT NULL,
   PRIMARY KEY (`id_solicitud`),
   UNIQUE KEY `solicitud_unica` (`id_donacion`,`id_organizacion`),
   KEY `id_organizacion` (`id_organizacion`),

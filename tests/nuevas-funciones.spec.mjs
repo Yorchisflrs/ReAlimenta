@@ -50,7 +50,7 @@ async function fillDonation(page) {
   const form = page.locator('#donation-form');
   await expect(form).toBeVisible();
   await form.locator('[name="alimento"]').fill(food);
-  await form.locator('[name="categoria"]').selectOption({ label: 'Panadería' });
+  await form.locator('[name="categoria"]').selectOption({ label: 'Panadería y complementos' });
   await form.locator('[name="cantidad"]').fill('14');
   await form.locator('[name="unidad"]').selectOption('unidades');
   await form.locator('[name="envase"]').fill('Envase cerrado de demostración UI');

@@ -13,3 +13,6 @@ playwright-report/
 # Fotografías subidas por los donantes (se conservan la carpeta y su protección .htaccess).
 uploads/donaciones/*
 !uploads/donaciones/.gitkeep
+
+# Fotos de perfil (fachada o logo) de donantes y beneficiarias.
+uploads/locales/*

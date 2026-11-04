@@ -79,11 +79,11 @@ try {
     report.donaciones.push({id:d.id_donacion,alimento:d.nombre_alimento});
   }
   const scenarios=[
-    {key:'CUSTODIA_PAN',name:'Pan integral · entrega al Comedor Esperanza',category:'Panadería',quantity:30,unit:'unidades',profile:'panaderia',donor:main,point:'centro',cold:false,deadline:iso(24*60),stages:['listo','recogido','en_transito'],recipient:org},
+    {key:'CUSTODIA_PAN',name:'Pan integral · entrega al Comedor Esperanza',category:'Panadería y complementos',quantity:30,unit:'unidades',profile:'panaderia',donor:main,point:'centro',cold:false,deadline:iso(24*60),stages:['listo','recogido','en_transito'],recipient:org},
     {key:'CUSTODIA_SALSA',name:'Salsa de tomate · coordinación universitaria',category:'Alimentos preparados',quantity:12,unit:'porciones',profile:'preparado',donor:main,point:'universidad',cold:true,deadline:at(55),available:at(-5),pickup:at(30),stages:[],recipient:org,proposed:at(0)},
     {key:'CUSTODIA_INTERURBANA',name:'Crema de verduras · evaluación Puno–Juliaca',category:'Alimentos preparados',quantity:20,unit:'porciones',profile:'preparado',donor:university,point:'universidad',cold:true,deadline:at(55),available:at(-5),pickup:at(30),stages:[],recipient:orgJ,proposed:at(0)},
-    {key:'CUSTODIA_FRIO',name:'Yogur envasado · conservación en revisión',category:'Lácteos',quantity:18,unit:'unidades',profile:'refrigerado',donor:main,point:'centro',cold:true,deadline:iso(24*60),stages:['listo'],recipient:org,incident:true},
-    {key:'CUSTODIA_RECIBIDA',name:'Canastas de fruta · recepción confirmada',category:'Frutas',quantity:8,unit:'cajas',profile:'frutas',donor:garden,point:'mercado',cold:false,deadline:iso(36*60),stages:['listo','recogido','en_transito','entregado','confirmado'],recipient:org}
+    {key:'CUSTODIA_FRIO',name:'Yogur envasado · conservación en revisión',category:'Lácteos y derivados',quantity:18,unit:'unidades',profile:'refrigerado',donor:main,point:'centro',cold:true,deadline:iso(24*60),stages:['listo'],recipient:org,incident:true},
+    {key:'CUSTODIA_RECIBIDA',name:'Canastas de fruta · recepción confirmada',category:'Verduras, tubérculos y frutas',quantity:8,unit:'cajas',profile:'frutas',donor:garden,point:'mercado',cold:false,deadline:iso(36*60),stages:['listo','recogido','en_transito','entregado','confirmado'],recipient:org}
   ];
   for(const scenario of scenarios){
     const d=await addFood({...scenario,state:'en_proceso',description:'Escenario ficticio de cadena de custodia para demostración; no representa una entrega ni un lote físico real.',preservation:scenario.cold?'Conservación refrigerada declarada; verificar antes de distribuir.':'Alimento protegido en envase cerrado según declaración de demostración.'});

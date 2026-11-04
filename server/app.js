@@ -10,7 +10,7 @@ import { businessRouter, getStats } from './business.js';
 import { errorHandler } from './errors.js';
 import { createLogisticsRouter } from './logistics.js';
 import { custodyRouter } from './custody.js';
-import { photoRouter,mediaRouter } from './photos.js';
+import { photoRouter,mediaRouter,localMediaRouter } from './photos.js';
 import { recoveryRouter } from './recovery.js';
 import { browserScript } from './puno.js';
 
@@ -36,7 +36,9 @@ export function createApp() {
     },
     strictTransportSecurity: process.env.NODE_ENV === 'production' ? undefined : false
   }));
-  app.use(express.json({ limit: '64kb' }));
+  // El registro lleva la foto del local en base64 (hasta 5 MB de imagen); el resto de la API, solo datos.
+  const smallJson = express.json({ limit: '64kb' }), photoJson = express.json({ limit: '8mb' });
+  app.use((req, res, next) => (['/api/auth/register', '/api/perfil'].includes(req.path) ? photoJson : smallJson)(req, res, next));
   app.use((req, res, next) => { if (!req.body) req.body = {}; next(); });
   app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   app.use('/api', checkOrigin);
@@ -73,6 +75,7 @@ export function createApp() {
   app.use('/api', businessRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No existe este recurso de la API.' } }));
   app.use('/media/donaciones',loadSession,mediaRouter);
+  app.use('/media/locales',loadSession,localMediaRouter);
 
   const pages = { donante: 'donante.html', organizacion: 'organizacion.html', administrador: 'administrador.html' };
   for (const [role, name] of Object.entries(pages)) {

@@ -1,7 +1,7 @@
 /* Reglas de los formularios para Puno/Perú: filtra lo que se escribe y muestra mensajes claros.
    El servidor vuelve a comprobar lo mismo (server/validation.js); window.REAPuno viene de /js/puno.js. */
 (() => {
-  const P = window.REAPuno || { PROVINCIAS: {}, TELEFONO: '^(9\\d{8}|051\\d{6})$', NOMBRE: '.*', CORREO_REGISTRO: '.*' };
+  const P = window.REAPuno || { PROVINCIAS: {}, TELEFONO: '^(9\\d{8}|051\\d{6})$', NOMBRE: '.*', CORREO_REGISTRO: '.*', DNI: '^\\d{8}$', RUC: '^\\d{11}$', TIPOS_ORGANIZACION: [] };
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const PERSON = ['nombre', 'responsable', 'responsable_recojo'];
   const WORDS = ['alimento', 'envase', 'transporte_declarado', 'recipiente_declarado', 'direccion', 'direccion_recojo', 'entidad', 'descripcion', 'observaciones', 'referencia', 'motivo'];
@@ -17,9 +17,14 @@
       if (value.split(/\s+/).filter(part => letters(part) >= 2).length < 2) return 'Escribe nombre y apellido.';
       return '';
     }
-    if (name === 'correo' && el.closest('#register-form')) return new RegExp(P.CORREO_REGISTRO).test(value.toLowerCase()) ? '' : 'Usa tu correo Gmail (@gmail.com) o un correo institucional peruano (Ej. @unap.edu.pe, @munipuno.gob.pe).';
+    if (name === 'correo' && el.closest('#register-form, #profile-form')) return new RegExp(P.CORREO_REGISTRO).test(value) ? '' : 'Escribe un correo como usuario@dominio.com, sin ñ, tildes ni espacios.';
     if (name === 'correo') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? '' : 'Escribe un correo válido, Ej. nombre@gmail.com.';
-    if (name === 'contrasena' && el.autocomplete === 'new-password') return /\p{L}/u.test(value) && /\d/.test(value) ? '' : 'La contraseña debe tener letras y al menos un número.';
+    if (name === 'contrasena' && el.autocomplete === 'new-password') return value.length >= 8 && /\p{L}/u.test(value) && /\d/.test(value) ? '' : 'La contraseña debe tener al menos 8 caracteres, con letras y números.';
+    if (name === 'confirmacion') return value === (el.form?.elements.namedItem('contrasena')?.value || '') ? '' : 'Las contraseñas no coinciden.';
+    if (name === 'dni_representante') return new RegExp(P.DNI).test(value) ? '' : 'El DNI debe tener exactamente 8 números.';
+    if (name === 'ruc') return new RegExp(P.RUC).test(value) ? '' : 'El RUC debe tener exactamente 11 números.';
+    if (name === 'tiempo_llegada_min') return /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 600 ? '' : 'Escribe los minutos que tardarán, de 1 a 600 (Ej. 40).';
+    if (name === 'numero_beneficiarios') return /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 100000 ? '' : 'Escribe cuántas personas se benefician, solo números (Ej. 60).';
     if (name === 'cantidad') return /^\d{1,6}([.,]\d{1,2})?$/.test(value) && Number(value.replace(',', '.')) > 0 && Number(value.replace(',', '.')) <= 100000 ? '' : 'Escribe solo números, mayor que 0 y hasta 100 000 (Ej. 30 o 2.5).';
     if (WORDS.includes(name)) {
       if (/[<>{}[\]\\|^~`]/.test(value)) return 'No uses los signos < > { } [ ] \\ | ^ ~ `.';
@@ -48,8 +53,15 @@
     if (el.name === 'telefono') el.value = before.replace(/\D/g, '').slice(0, 9);
     else if (el.name === 'cantidad') el.value = before.replace(',', '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
     else if (PERSON.includes(el.name)) el.value = before.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ'.\- ]/g, '');
-    else if (el.name === 'correo') el.value = before.replace(/\s/g, '');
+    else if (el.name === 'correo') el.value = before.replace(/\s/g, '').toLowerCase();
+    else if (el.name === 'dni_representante') el.value = before.replace(/\D/g, '').slice(0, 8);
+    else if (el.name === 'ruc') el.value = before.replace(/\D/g, '').slice(0, 11);
+    else if (el.name === 'numero_beneficiarios') el.value = before.replace(/\D/g, '').slice(0, 6);
+    else if (el.name === 'tiempo_llegada_min') el.value = before.replace(/\D/g, '').slice(0, 3);
     if (el.validationMessage || el.value !== before) check(el);
+    // Si cambia la contraseña, la confirmación ya escrita se vuelve a comparar.
+    const confirmation = el.name === 'contrasena' && el.form?.elements.namedItem('confirmacion');
+    if (confirmation?.value) check(confirmation);
   }, true);
   // Al salir del campo se muestra el problema; al enviar se revisan todos antes de que el formulario siga.
   document.addEventListener('focusout', event => { if (event.target.name) check(event.target); });

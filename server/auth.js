@@ -4,8 +4,10 @@ import { Router } from 'express';
 import { db, transaction, audit } from './db.js';
 import { config } from './config.js';
 import { fail } from './errors.js';
-import { text, profileInput, phone, personName, loginEmail, registrationEmail, password as passwordRule } from './validation.js';
+import { unlink } from 'node:fs/promises';
+import { text, registrationProfile, phone, personName, loginEmail, registrationEmail, password as passwordRule } from './validation.js';
 import { donorProfile, organizationProfile } from './mappers.js';
+import { saveLocalPhoto } from './photos.js';
 
 const scrypt = promisify(scryptCallback);
 export async function hashPassword(password) {
@@ -159,6 +161,23 @@ authRouter.post('/login', async (req, res) => {
   res.cookie('realimenta_session', issued.token, { ...cookieOptions, maxAge: config.sessionHours * 3600000 });
   res.json({ user, csrfToken: issued.csrfToken });
 });
+// Cambio de contraseña desde "Mi perfil": exige la actual. La sesión se renueva porque la anterior
+// queda invalidada al cambiar la contraseña (las sesiones guardan su huella).
+authRouter.post('/contrasena', requireAuth, async (req, res) => {
+  loginLimit(req);
+  const row = (await db.query('SELECT * FROM usuarios WHERE id_usuario = ?', [req.user.id_usuario])).rows[0];
+  const current = typeof req.body.actual === 'string' && req.body.actual.length <= 128 ? req.body.actual : '';
+  if (!(await verifyPassword(current, row.password_hash))) fail(422, 'WRONG_PASSWORD', 'La contraseña actual no es correcta.');
+  const hash = await hashPassword(passwordInput(req.body.nueva));
+  await transaction(async client => {
+    await client.query('UPDATE usuarios SET password_hash = ? WHERE id_usuario = ?', [hash, row.id_usuario]);
+    await audit(client, row.id_usuario, 'usuarios', row.id_usuario, 'cambiar_contrasena');
+  });
+  revoke(req.session);
+  const issued = issueSession({ ...row, password_hash: hash });
+  res.cookie('realimenta_session', issued.token, { ...cookieOptions, maxAge: config.sessionHours * 3600000 });
+  res.json({ data: { message: 'Contraseña actualizada.' }, csrfToken: issued.csrfToken });
+});
 authRouter.post('/logout', requireAuth, async (req, res) => {
   revoke(req.session);
   await audit(db, req.user.id_usuario, 'usuarios', req.user.id_usuario, 'cerrar_sesion');
@@ -171,18 +190,27 @@ authRouter.post('/register', async (req, res) => {
   const rol = req.body.rol;
   if (!['donante', 'organizacion'].includes(rol)) fail(422, 'INVALID_ROLE', 'Solo se permite registro público de donantes o beneficiarias.');
   const telefono = phone(req.body.telefono);
-  const perfil = profileInput(req.body, rol);
+  const perfil = registrationProfile(req.body, rol);
   const hash = await hashPassword(passwordInput(req.body.contrasena));
-  const result = await transaction(async client => {
-    if ((await client.query('SELECT 1 FROM usuarios WHERE correo = ?', [correo])).rowCount)
-      fail(409, 'EMAIL_IN_USE', 'Ya existe una cuenta registrada con este correo.');
-    // estado queda con el valor por defecto de la tabla ("pendiente") hasta la verificación administrativa.
-    const user = await client.query('INSERT INTO usuarios (nombres, apellidos, correo, password_hash, telefono, rol) VALUES (?, NULL, ?, ?, ?, ?)', [nombre, correo, hash, telefono, rol]);
-    const entries = Object.entries(perfil);
-    await client.query(`INSERT INTO ${rol === 'donante' ? 'donantes' : 'organizaciones'} (id_usuario, ${entries.map(([key]) => key).join(', ')})
-      VALUES (?, ${entries.map(() => '?').join(', ')})`, [user.insertId, ...entries.map(([, value]) => value)]);
-    await audit(client, user.insertId, 'usuarios', user.insertId, 'registrar', { rol, estado_verificacion: 'pendiente' });
-    return { id_usuario: user.insertId, estado_verificacion: 'pendiente', message: 'Cuenta registrada. El perfil requiere verificación administrativa; puede iniciar sesión para consultar sus datos.' };
-  });
+  const foto = await saveLocalPhoto(req.body.foto);
+  perfil.foto_local = foto.relativePath;
+  let result;
+  try {
+    result = await transaction(async client => {
+      if ((await client.query('SELECT 1 FROM usuarios WHERE correo = ?', [correo])).rowCount)
+        fail(409, 'EMAIL_IN_USE', 'Ya existe una cuenta registrada con este correo.');
+      // estado queda con el valor por defecto de la tabla ("pendiente") hasta la verificación administrativa.
+      const user = await client.query('INSERT INTO usuarios (nombres, apellidos, correo, password_hash, telefono, rol) VALUES (?, NULL, ?, ?, ?, ?)', [nombre, correo, hash, telefono, rol]);
+      const entries = Object.entries(perfil);
+      await client.query(`INSERT INTO ${rol === 'donante' ? 'donantes' : 'organizaciones'} (id_usuario, ${entries.map(([key]) => key).join(', ')})
+        VALUES (?, ${entries.map(() => '?').join(', ')})`, [user.insertId, ...entries.map(([, value]) => value)]);
+      await audit(client, user.insertId, 'usuarios', user.insertId, 'registrar', { rol, estado_verificacion: 'pendiente' });
+      return { id_usuario: user.insertId, estado_verificacion: 'pendiente', message: 'Cuenta registrada. El perfil requiere verificación administrativa; puede iniciar sesión para consultar sus datos.' };
+    });
+  } catch (error) {
+    // Si el registro no se guarda, la foto del local no queda huérfana en la carpeta.
+    await unlink(foto.destination).catch(cleanup => console.error('No se pudo eliminar la foto del local no registrada:', cleanup.message));
+    throw error;
+  }
   res.status(201).json({ data: result });
 });

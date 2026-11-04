@@ -31,7 +31,8 @@
     icon.style.cssText = `display:grid;place-items:center;width:32px;height:32px;background:${color};border:3px solid white;border-radius:50%;color:white;box-shadow:0 3px 12px #0004;font:700 14px sans-serif`;
     return L.divIcon({ html: icon, className: '', iconSize: [32,32], iconAnchor: [16,16] });
   }
-  function mountPicker(container, { latitud, longitud, onChange } = {}) {
+  // readonly: solo muestra el punto (perfil), sin mover el marcador ni tocar el mapa.
+  function mountPicker(container, { latitud, longitud, onChange, readonly = false } = {}) {
     const map = canvas(container);
     if (!map) return { setPosition() {}, getPosition: () => null, destroy() {} };
     let pin = null;
@@ -40,13 +41,13 @@
       if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
       position = { latitud: Number(lat), longitud: Number(lng) };
       if (!pin) {
-        pin = L.marker([lat,lng], { draggable: true, icon: markerIcon('●','#087f5b') }).addTo(map);
+        pin = L.marker([lat,lng], { draggable: !readonly, icon: markerIcon('●','#087f5b') }).addTo(map);
         pin.on('dragend', () => { const point = pin.getLatLng(); setPosition(point.lat, point.lng); });
       } else pin.setLatLng([lat,lng]);
       map.setView([lat,lng], Math.max(15,map.getZoom()));
       onChange?.(position);
     }
-    map.on('click', event => setPosition(event.latlng.lat, event.latlng.lng));
+    if (!readonly) map.on('click', event => setPosition(event.latlng.lat, event.latlng.lng));
     if (latitud !== null && latitud !== undefined && latitud !== '' && longitud !== null && longitud !== undefined && longitud !== '') setPosition(latitud,longitud);
     return { map, setPosition, getPosition: () => position, destroy: () => removeMap(map.getContainer()) };
   }
