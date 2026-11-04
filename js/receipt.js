@@ -16,18 +16,22 @@
   const buttons=(back,confirm,text)=>`<div class="mvp-message error" data-form-error tabindex="-1" hidden></div><div class="dialog-actions"><button class="btn btn-secondary" type="button" data-action="${back}"><i class="fa-solid fa-pen"></i> Corregir</button><button class="btn btn-primary" type="button" data-action="${confirm}"><i class="fa-solid fa-check"></i> ${text}</button></div>`;
 
   // d usa los nombres del formulario/API: alimento, categoria, cantidad, unidad, fechas, direccion_recojo...
-  function preview(d,photos){
-    const cold=d.requiere_cadena_frio?'Sí, debe ir frío':'No es necesario';
+  // Todos los datos del formulario, en el mismo orden que el comprobante PDF (los vacíos se muestran como tales).
+  function donationRows(d,user={},profile={}){
+    return [
+      ['Qué vas a donar','fa-solid fa-box-open',[['Alimento',d.alimento],['Tipo de alimento',d.categoria],['Cantidad',`${qty(d.cantidad)} ${show('unidad',d.unidad)}`],['Detalles',d.descripcion||'Sin detalles']]],
+      ['Cómo se guarda','fa-solid fa-snowflake',[['Forma de guardarlo',show('conservacion',d.conservacion_declarada)],['Empaque',d.envase],['Debe ir frío en el viaje',d.requiere_cadena_frio?'Sí':'No'],['Temperatura',d.temperatura_declarada||'No indicada']]],
+      ['Horario de recojo','fa-regular fa-clock',[['Se puede recoger desde',when(d.fecha_disponibilidad)],['Se puede recoger hasta',when(d.fecha_limite_recojo)],['Consumir antes de',when(d.fecha_limite_aprovechamiento_declarada)||'No indicado'],['Indicaciones para el recojo',d.observaciones||'Sin indicaciones']]],
+      ['Lugar de recojo','fa-solid fa-location-dot',[['Dirección',d.direccion_recojo],['Distrito',d.distrito||'-'],['Referencia',d.referencia||d.indicaciones_recojo||'Sin referencia'],['Ubicación en el mapa',d.latitud_recojo!=null?`Marcada (${Number(d.latitud_recojo).toFixed(5)}, ${Number(d.longitud_recojo).toFixed(5)})`:'Sin marcar']]],
+      ['Quién dona','fa-solid fa-store',[['Negocio',profile.nombre_establecimiento||d.donante_nombre||'-'],['RUC',profile.ruc||'-'],['Representante',user.nombre||profile.responsable||'-'],['Celular o teléfono',user.telefono||'-']]]
+    ];
+  }
+  function preview(d,photos,user={},profile={}){
     return `<div class="receipt-preview">
-      <div class="rp-hero"><div class="rp-qty"><strong>${qty(d.cantidad)}</strong><span>${esc(show('unidad',d.unidad))}</span></div><div><small>VAS A DONAR</small><h3>${esc(d.alimento)}</h3><span class="rp-chip">${esc(show('categoria',d.categoria))}</span></div></div>
+      <div class="rp-hero"><div class="rp-qty"><strong>${qty(d.cantidad)}</strong><span>${esc(show('unidad',d.unidad))}</span></div><div><small>VAS A DONAR</small><h3>${esc(d.alimento)}</h3><span class="rp-chip">${esc(d.categoria)}</span></div></div>
       <div class="rp-photos">${photos.map(p=>`<figure>${p.url?`<img src="${esc(p.url)}" alt="Foto ${esc(p.title.toLowerCase())}">`:'<span class="rp-nophoto"><i class="fa-solid fa-image"></i></span>'}<figcaption>${esc(p.title)}</figcaption></figure>`).join('')}</div>
-      <div class="rp-grid">
-        ${card('fa-solid fa-snowflake','CÓMO SE GUARDA',show('conservacion',d.conservacion_declarada),`Empaque: ${d.envase} · Frío en el viaje: ${cold}${d.temperatura_declarada?` · ${d.temperatura_declarada}`:''}`)}
-        ${card('fa-regular fa-clock','HORARIO DE RECOJO',`${when(d.fecha_disponibilidad)} a ${when(d.fecha_limite_recojo)}`,d.fecha_limite_aprovechamiento_declarada?`Consumir antes de: ${when(d.fecha_limite_aprovechamiento_declarada)}`:'')}
-        ${card('fa-solid fa-location-dot','LUGAR DE RECOJO',d.direccion_recojo,[d.distrito,d.referencia].filter(Boolean).join(' · '))}
-        ${d.descripcion||d.observaciones?card('fa-regular fa-note-sticky','DETALLES E INDICACIONES',d.descripcion||d.observaciones,d.descripcion&&d.observaciones?d.observaciones:''):''}
-      </div>
-      <p class="rp-note"><i class="fa-solid fa-file-pdf"></i> Al confirmar, tu donación quedará registrada y se descargará un <strong>comprobante en PDF</strong> como evidencia.</p>
+      <div class="rp-sections">${donationRows(d,user,profile).map(([title,icon,rows])=>`<section class="rp-section"><h4><i class="${icon}"></i> ${esc(title)}</h4><dl>${rows.map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></section>`).join('')}</div>
+      <p class="rp-note"><i class="fa-solid fa-file-pdf"></i> Al confirmar, tu donación quedará registrada y se descargará un <strong>comprobante en PDF</strong> con estos mismos datos.</p>
       ${buttons('close-dialog','confirm-publish','Confirmar y publicar')}
     </div>`;
   }
@@ -40,7 +44,7 @@
       <div class="rp-grid">
         ${card('fa-solid fa-people-roof','BENEFICIARIA',profile.nombre||'Tu entidad',`${profile.direccion||''}${profile.distrito?` · ${profile.distrito}`:''}`)}
         ${card('fa-solid fa-user','QUIÉN RECOGE',r.responsable_recojo,`Teléfono: ${r.telefono}`)}
-        ${card('fa-regular fa-clock','CUÁNDO IRÁN',when(r.fecha_propuesta),`Se puede recoger hasta: ${when(d.fecha_limite_recojo)}`)}
+        ${card('fa-regular fa-clock','CUÁNDO IRÁN',when(r.fecha_propuesta),`Tardarán ${r.tiempo_llegada_min} min en llegar · Se puede recoger hasta: ${when(d.fecha_limite_recojo)}`)}
         ${card('fa-solid fa-truck','CÓMO LO LLEVARÁN',r.transporte_declarado,`En: ${r.recipiente_declarado} · Lo mantienen frío: ${r.dispone_cadena_frio?'Sí':'No'}`)}
         ${card('fa-solid fa-location-dot','DÓNDE SE RECOGE',d.direccion_recojo,[d.distrito,d.referencia].filter(Boolean).join(' · '))}
         ${r.observaciones?card('fa-regular fa-comment','MENSAJE PARA EL DONANTE',r.observaciones):''}
@@ -134,7 +138,7 @@
       for(const [label,value] of rows){
         doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...muted);doc.t(label.toUpperCase(),x+4,yy);yy+=3.6;
         doc.setFontSize(9.5);doc.setTextColor(...ink);
-        const lines=doc.splitTextToSize(clean(value),cw-6).slice(0,4);doc.text(lines,x+4,yy);yy+=lines.length*4+1.9;
+        const lines=doc.splitTextToSize(clean(value),cw-6).slice(0,8);doc.text(lines,x+4,yy);yy+=lines.length*4+1.9;
       }
       return yy;
     };
@@ -157,14 +161,9 @@
   async function download(d,user={},profile={},localPhotos=[]){
     const doc=newDoc('Comprobante de registro de donación','DONACIÓN N.º',d.id_donacion);
     let y=registryBox(doc,46,d.fecha_creacion,'DONANTE',profile.nombre_establecimiento||d.donante_nombre||'',user.correo||user.nombre||'',states[d.estado]||(d.estado?String(d.estado).replace(/_/g,' '):'Publicada'));
-    y=tiles(doc,y,[[qty(d.cantidad),show('unidad',d.unidad)],[d.alimento,'Qué alimento es'],[show('categoria',d.categoria),'Tipo de alimento']]);
+    y=tiles(doc,y,[[qty(d.cantidad),show('unidad',d.unidad)],[d.alimento,'Qué alimento es'],[d.categoria,'Tipo de alimento']]);
     y=await photos(doc,y,[0,1,2].map(i=>localPhotos[i]?.url||d.fotos?.[i]?.url));
-    y=sections(doc,y,[
-      ['Cómo se guarda',[['Forma de guardarlo',show('conservacion',d.conservacion_declarada)],['Empaque',d.envase],['Debe ir frío en el viaje',d.requiere_cadena_frio?'Sí':'No'],['Temperatura',d.temperatura_declarada||'No indicada']]],
-      ['Horario de recojo',[['Se puede recoger desde',when(d.fecha_disponibilidad)],['Se puede recoger hasta',when(d.fecha_limite_recojo)],['Consumir antes de',when(d.fecha_limite_aprovechamiento_declarada)||'No indicado']]],
-      ['Lugar de recojo',[['Dirección',d.direccion_recojo],['Distrito',d.distrito||'-'],['Referencia',d.referencia||d.indicaciones_recojo||'-'],['Coordenadas',d.latitud_recojo!=null?`${Number(d.latitud_recojo).toFixed(5)}, ${Number(d.longitud_recojo).toFixed(5)}`:'-']]],
-      ['Detalles e indicaciones',[['Detalles',d.descripcion||'-'],['Indicaciones para el recojo',d.observaciones||'-']]]
-    ]);
+    y=sections(doc,y,donationRows(d,user,profile).map(([title,,rows])=>[title,rows]));
     const code=await fingerprint([d.id_donacion,d.alimento,d.cantidad,d.unidad,d.fecha_creacion,d.fecha_limite_recojo,d.direccion_recojo,(d.fotos||[]).map(f=>f.nombre_archivo||f.url)]);
     footer(doc,y,code,[`Documento generado el ${when(new Date())} desde REAlimenta. Conserva este archivo como evidencia del registro.`,'La información y las fotos fueron declaradas por el donante. La plataforma no certifica la calidad del alimento.']);
     doc.save(`comprobante-donacion-${d.id_donacion}.pdf`);
@@ -179,7 +178,7 @@
     if(d.fotos?.length)y=await photos(doc,y,d.fotos.map(f=>f.url),30);
     y=sections(doc,y,[
       ['Quién recoge',[['Responsable del recojo',r.responsable_recojo],['Teléfono',r.telefono],['Beneficiaria',org.nombre||'-'],['Dirección de la beneficiaria',[org.direccion,org.distrito].filter(Boolean).join(', ')||'-']]],
-      ['Cuándo y cómo',[['Fecha y hora propuesta',when(r.fecha_propuesta)],['Transporte',r.transporte_declarado],['Recipiente',r.recipiente_declarado],['Pueden mantenerlo frío',r.dispone_cadena_frio?'Sí':'No']]],
+      ['Cuándo y cómo',[['Fecha y hora propuesta',when(r.fecha_propuesta)],['Tiempo para llegar',r.tiempo_llegada_min?`${r.tiempo_llegada_min} min`:'No indicado'],['Transporte',r.transporte_declarado],['Recipiente',r.recipiente_declarado],['Pueden mantenerlo frío',r.dispone_cadena_frio?'Sí':'No']]],
       ['Lugar de recojo',[['Dirección',d.direccion_recojo||'-'],['Distrito',d.distrito||'-'],['Se puede recoger',`${when(d.fecha_disponibilidad)} a ${when(d.fecha_limite_recojo)}`],['Cómo se guarda',`${show('conservacion',d.conservacion_declarada)}${d.requiere_cadena_frio?' · debe ir frío':''}`]]],
       ['Mensaje para el donante',[['Mensaje',r.observaciones||'-']]]
     ]);

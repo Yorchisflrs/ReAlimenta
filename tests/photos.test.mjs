@@ -32,7 +32,7 @@ async function donor() {
   return login(correo);
 }
 async function donation(account) {
-  const result = await call('POST', '/api/donaciones', { alimento: 'Alimento para prueba de fotografías', categoria: 'Panadería', cantidad: 12, unidad: 'unidades', descripcion: 'Registro de una base temporal aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público demostrativo de Puno', distrito: 'Puno', latitud_recojo: -15.840908, longitud_recojo: -70.0289581, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba' }, account);
+  const result = await call('POST', '/api/donaciones', { alimento: 'Alimento para prueba de fotografías', categoria: 'Panadería y complementos', cantidad: 12, unidad: 'unidades', descripcion: 'Registro de una base temporal aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público demostrativo de Puno', distrito: 'Puno', latitud_recojo: -15.840908, longitud_recojo: -70.0289581, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba' }, account);
   assert.equal(result.status, 201, JSON.stringify(result.data));
   return result.data.data;
 }
@@ -46,7 +46,7 @@ async function media(url, account) {
   return { status: response.status, response, buffer: Buffer.from(await response.arrayBuffer()) };
 }
 async function request(donationId) {
-  const result = await call('POST', `/api/donaciones/${donationId}/solicitudes`, { responsable_recojo: 'Responsable de fotografía prueba', telefono: '951000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString() }, accounts.organizacion);
+  const result = await call('POST', `/api/donaciones/${donationId}/solicitudes`, { tiempo_llegada_min: 25, responsable_recojo: 'Responsable de fotografía prueba', telefono: '951000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString() }, accounts.organizacion);
   assert.equal(result.status, 201, JSON.stringify(result.data));
   return result.data.data;
 }

@@ -24,7 +24,14 @@ export const LIMITES = { latMin: -17.35, latMax: -12.95, lonMin: -71.15, lonMax:
 export const TELEFONO = '^(9\\d{8}|051\\d{6})$';
 // Nombres de personas: letras (con tildes y ñ), espacios, apóstrofo, punto y guion.
 export const NOMBRE = "^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ'.\\- ]*$";
-// Correo del registro: Gmail o un dominio institucional peruano (.edu.pe, .gob.pe, .org.pe, .com.pe, .pe…).
-export const CORREO_REGISTRO = '^[a-z0-9._%+-]+@(gmail\\.com|([a-z0-9-]+\\.)+pe)$';
+// Correo del registro: usuario@dominio.extension en minúsculas, sin ñ, tildes ni espacios.
+export const CORREO_REGISTRO = '^[a-z0-9._%+-]+@[a-z0-9-]+(\\.[a-z0-9-]+)*\\.[a-z]{2,}$';
+// DNI del representante (8 dígitos) y RUC del negocio donante (11 dígitos).
+export const DNI = '^\\d{8}$';
+export const RUC = '^\\d{11}$';
+// Tipos de organización beneficiaria que se pueden registrar.
+export const TIPOS_ORGANIZACION = ['Olla Común', 'Comedor Popular', 'Vaso de Leche'];
+// Tipos de alimento de una donación (se guardan en donaciones.categoria).
+export const TIPOS_ALIMENTO = ['Abarrotes y alimentos secos', 'Conservas y enlatados', 'Verduras, tubérculos y frutas', 'Carnes, pescados y huevos', 'Lácteos y derivados', 'Panadería y complementos', 'Alimentos preparados'];
 
-export const browserScript = () => `window.REAPuno=${JSON.stringify({ PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO })};`;
+export const browserScript = () => `window.REAPuno=${JSON.stringify({ PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO, DNI, RUC, TIPOS_ORGANIZACION, TIPOS_ALIMENTO })};`;

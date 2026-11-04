@@ -38,7 +38,7 @@ test('Flujo local completo: publicar 60 panes con foto, solicitar, aceptar, ruta
   await login(page,'donante');await navigate(page,'nueva-donacion');
   const form=page.locator('#donation-form');
   await form.locator('[name="alimento"]').fill(food);
-  await form.locator('[name="categoria"]').selectOption({label:'Panadería'});
+  await form.locator('[name="categoria"]').selectOption({label: 'Panadería y complementos'});
   await form.locator('[name="cantidad"]').fill('60');
   await form.locator('[name="envase"]').fill('Bolsas de papel cerradas dentro de caja limpia');
   await form.locator('[name="perfil_alimento"]').selectOption('panaderia');
@@ -66,7 +66,7 @@ test('Flujo local completo: publicar 60 panes con foto, solicitar, aceptar, ruta
   await request.locator('[name="telefono"]').fill('951000000');
   await request.locator('[name="fecha_propuesta"]').fill(limaInput(5));
   await request.locator('[name="transporte_declarado"]').fill('Vehículo para recojo y traslado');
-  await request.locator('[name="recipiente_declarado"]').fill('Caja limpia con tapa');
+  await request.locator('[name="recipiente_declarado"]').fill('Caja limpia con tapa'); await request.locator('[name="tiempo_llegada_min"]').fill('25');
   await request.locator('button[type="submit"]').click();
   await expect(page.locator('#app-dialog')).not.toBeVisible();
 

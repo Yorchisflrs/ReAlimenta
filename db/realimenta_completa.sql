@@ -193,6 +193,8 @@ CREATE TABLE `donantes` (
   `longitud` decimal(10,7) DEFAULT NULL,
   `estado_verificacion` enum('pendiente','verificado','rechazado') DEFAULT 'pendiente',
   `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp(),
+  `dni_representante` char(8) DEFAULT NULL,
+  `foto_local` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id_donante`),
   UNIQUE KEY `id_usuario` (`id_usuario`),
   CONSTRAINT `donantes_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
@@ -205,7 +207,7 @@ CREATE TABLE `donantes` (
 
 LOCK TABLES `donantes` WRITE;
 /*!40000 ALTER TABLE `donantes` DISABLE KEYS */;
-INSERT INTO `donantes` VALUES (1,1,'Panadería San Carlos · DEMO',NULL,NULL,'Donante de demostración','Punto público demostrativo: Catedral Basílica San Carlos Borromeo, Jirón Deustua, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8409080,-70.0289580,'verificado','2026-10-28 13:42:26');
+INSERT INTO `donantes` VALUES (1,1,'Panadería San Carlos · DEMO',NULL,NULL,'Donante de demostración','Punto público demostrativo: Catedral Basílica San Carlos Borromeo, Jirón Deustua, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8409080,-70.0289580,'verificado','2026-10-28 13:42:26',NULL,NULL);
 /*!40000 ALTER TABLE `donantes` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -387,6 +389,8 @@ CREATE TABLE `organizaciones` (
   `longitud` decimal(10,7) DEFAULT NULL,
   `estado_verificacion` enum('pendiente','verificado','rechazado') DEFAULT 'pendiente',
   `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp(),
+  `dni_representante` char(8) DEFAULT NULL,
+  `foto_local` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id_organizacion`),
   UNIQUE KEY `id_usuario` (`id_usuario`),
   CONSTRAINT `organizaciones_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
@@ -399,7 +403,7 @@ CREATE TABLE `organizaciones` (
 
 LOCK TABLES `organizaciones` WRITE;
 /*!40000 ALTER TABLE `organizaciones` DISABLE KEYS */;
-INSERT INTO `organizaciones` VALUES (1,2,'Comedor Esperanza · DEMO',NULL,'Responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26'),(2,3,'Red Solidaria · DEMO',NULL,'Segundo responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno (segunda cuenta de prueba) · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26');
+INSERT INTO `organizaciones` VALUES (1,2,'Comedor Esperanza · DEMO',NULL,'Responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26',NULL,NULL),(2,3,'Red Solidaria · DEMO',NULL,'Segundo responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno (segunda cuenta de prueba) · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26',NULL,NULL);
 /*!40000 ALTER TABLE `organizaciones` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -457,6 +461,7 @@ CREATE TABLE `solicitudes` (
   `observaciones` text DEFAULT NULL,
   `estado` enum('pendiente','en_revision','aceptada','rechazada','cancelada') DEFAULT 'pendiente',
   `fecha_solicitud` timestamp NOT NULL DEFAULT current_timestamp(),
+  `tiempo_llegada_min` smallint(5) unsigned DEFAULT NULL,
   PRIMARY KEY (`id_solicitud`),
   UNIQUE KEY `solicitud_unica` (`id_donacion`,`id_organizacion`),
   KEY `id_organizacion` (`id_organizacion`),
@@ -471,7 +476,7 @@ CREATE TABLE `solicitudes` (
 
 LOCK TABLES `solicitudes` WRITE;
 /*!40000 ALTER TABLE `solicitudes` DISABLE KEYS */;
-INSERT INTO `solicitudes` VALUES (1,5,1,8.00,'Organización de demostración','000000000','2026-10-28 10:45:00','Mototaxi','Cooler con hielo','La organización declara medios para mantener la cadena de frío durante el traslado.',NULL,'aceptada','2026-10-28 14:45:06'),(2,6,1,20.00,'Organización de demostración','999999999','2026-10-28 11:46:00','auto toyota gris','bolsas cerradas','La organización declara medios para mantener la cadena de frío durante el traslado.','llegaremos en un auto color griz de la marca hilux','pendiente','2026-10-28 15:50:11'),(3,6,2,20.00,'Rosa Mamani Quispe','951234567','2026-10-28 12:32:00','Mototaxi','Cajas limpias con tapa',NULL,'Llegaremos en una mototaxi azul.','pendiente','2026-10-28 16:32:31');
+INSERT INTO `solicitudes` VALUES (1,5,1,8.00,'Organización de demostración','000000000','2026-10-28 10:45:00','Mototaxi','Cooler con hielo','La organización declara medios para mantener la cadena de frío durante el traslado.',NULL,'aceptada','2026-10-28 14:45:06',NULL),(2,6,1,20.00,'Organización de demostración','999999999','2026-10-28 11:46:00','auto toyota gris','bolsas cerradas','La organización declara medios para mantener la cadena de frío durante el traslado.','llegaremos en un auto color griz de la marca hilux','pendiente','2026-10-28 15:50:11',NULL),(3,6,2,20.00,'Rosa Mamani Quispe','951234567','2026-10-28 12:32:00','Mototaxi','Cajas limpias con tapa',NULL,'Llegaremos en una mototaxi azul.','pendiente','2026-10-28 16:32:31',NULL);
 /*!40000 ALTER TABLE `solicitudes` ENABLE KEYS */;
 UNLOCK TABLES;
 

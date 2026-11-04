@@ -24,6 +24,19 @@ export function parseDetail(value) {
   catch { return { texto: String(value) }; }
 }
 
+// Categorías de la versión anterior del formulario -> tipos de alimento actuales.
+const LEGACY_FOOD_TYPES = { 'Panadería': 'Panadería y complementos', 'Frutas': 'Verduras, tubérculos y frutas', 'Verduras': 'Verduras, tubérculos y frutas', 'Lácteos': 'Lácteos y derivados', 'Abarrotes': 'Abarrotes y alimentos secos' };
+export const foodType = value => LEGACY_FOOD_TYPES[value] || value || '';
+// Nombres guardados que corresponden a un tipo (el actual y los de la versión anterior).
+export const storedFoodTypes = type => [type, ...Object.keys(LEGACY_FOOD_TYPES).filter(key => LEGACY_FOOD_TYPES[key] === type)];
+
+// Foto de perfil (fachada o logo): solo se expone el enlace autenticado, nunca la ruta del disco.
+export const LOCAL_PHOTO_FILE = /^local_[a-f0-9]{16}\.webp$/;
+export function localPhotoUrl(value) {
+  const file = String(value || '').split('/').pop();
+  return LOCAL_PHOTO_FILE.test(file) ? `/media/locales/${file}` : null;
+}
+
 const hasCoordinates = row => row.latitud !== null && row.latitud !== undefined && row.longitud !== null && row.longitud !== undefined;
 function location(row) {
   const { direccion, referencia } = splitAddress(row.direccion);
@@ -36,7 +49,7 @@ export function donorProfile(row) {
   if (!row) return null;
   return {
     id_donante: row.id_donante, id_usuario: row.id_usuario, nombre_establecimiento: row.nombre_establecimiento,
-    ruc: row.ruc, tipo_establecimiento: row.tipo_establecimiento, responsable: row.responsable || '',
+    ruc: row.ruc, tipo_establecimiento: row.tipo_establecimiento, responsable: row.responsable || '', foto_url: localPhotoUrl(row.foto_local),
     ...location(row), estado_verificacion: row.estado_verificacion || 'pendiente', fecha_registro: row.fecha_registro
   };
 }
@@ -44,7 +57,7 @@ export function organizationProfile(row) {
   if (!row) return null;
   return {
     id_organizacion: row.id_organizacion, id_usuario: row.id_usuario, nombre: row.nombre, tipo_organizacion: row.tipo_organizacion,
-    responsable: row.responsable || '', numero_beneficiarios: row.numero_beneficiarios,
+    responsable: row.responsable || '', numero_beneficiarios: row.numero_beneficiarios, foto_url: localPhotoUrl(row.foto_local),
     ...location(row), estado_verificacion: row.estado_verificacion || 'pendiente', fecha_registro: row.fecha_registro
   };
 }
@@ -53,7 +66,7 @@ export function organizationProfile(row) {
 export function donationFromRow(d, donor = null) {
   return {
     id_donacion: d.id_donacion, id_donante: d.id_donante,
-    alimento: d.nombre_alimento, categoria: d.categoria || '', descripcion: d.descripcion || '',
+    alimento: d.nombre_alimento, categoria: foodType(d.categoria), descripcion: d.descripcion || '',
     cantidad: d.cantidad, unidad: d.unidad,
     perfil_alimento: FOOD_PROFILES.includes(d.estado_producto) ? d.estado_producto : 'general',
     estado_producto: d.estado_producto, fecha_elaboracion: d.fecha_elaboracion, fecha_vencimiento: d.fecha_vencimiento,
@@ -108,7 +121,7 @@ export function requestFields(s) {
     responsable_recojo: s.responsable_recojo || '', telefono: s.telefono_recojo || '',
     transporte_declarado: s.tipo_transporte || '', recipiente_declarado: s.recipiente || '',
     dispone_cadena_frio: coldChainDeclared(s.mensaje), fecha_propuesta: s.fecha_recojo_propuesta,
-    cantidad_solicitada: s.cantidad_solicitada, mensaje: s.mensaje || '', observaciones: s.observaciones || '',
+    cantidad_solicitada: s.cantidad_solicitada, mensaje: s.mensaje || '', observaciones: s.observaciones || '', tiempo_llegada_min: s.tiempo_llegada_min ?? null,
     estado: s.estado, fecha_creacion: s.fecha_solicitud, fecha_solicitud: s.fecha_solicitud,
     fecha_actualizacion: s.fecha_solicitud, motivo_decision: null
   };

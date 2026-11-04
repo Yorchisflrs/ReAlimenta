@@ -44,6 +44,25 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!register) return;
   register.provincia.innerHTML = REARules.provinceOptions('Puno');
   register.distrito.innerHTML = REARules.districtOptions('Puno', 'Puno');
+  register.tipo_organizacion.innerHTML = `<option value="">Elige el tipo</option>${(window.REAPuno?.TIPOS_ORGANIZACION || []).map(tipo => `<option>${tipo}</option>`).join('')}`;
+  // Foto de fachada o logo: se revisa antes de enviar y se muestra una vista previa.
+  const photoInput = register.foto_local, preview = document.querySelector('[data-local-preview]');
+  const photoProblem = file => !file ? '' : !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ? 'Elige una foto JPG, PNG o WebP.' : file.size > 5 * 1024 * 1024 ? 'La foto debe pesar como máximo 5 MB.' : '';
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files[0], problem = photoProblem(file);
+    photoInput.setCustomValidity(problem);
+    if (preview.src) URL.revokeObjectURL(preview.src);
+    preview.hidden = !file || Boolean(problem);
+    if (file && !problem) preview.src = URL.createObjectURL(file);
+    else preview.removeAttribute('src');
+    if (problem) photoInput.reportValidity();
+  });
+  const readBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(new Error('No se pudo leer la foto. Elige otra imagen.'));
+    reader.readAsDataURL(file);
+  });
   let role = new URLSearchParams(location.search).get('tipo') === 'organizacion' ? 'organizacion' : 'donante';
   let confirmed = false;
   let picker = null;
@@ -53,7 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
     roleInput.value = role;
     document.querySelectorAll('[data-register-role]').forEach(button => { button.classList.toggle('selected', button.dataset.registerRole === role); button.setAttribute('aria-pressed', String(button.dataset.registerRole === role)); });
     document.querySelector('[data-entity-label]').textContent = role === 'donante' ? 'Nombre de tu negocio' : 'Nombre de tu entidad beneficiaria';
-    register.entidad.placeholder = role === 'donante' ? 'Ej. Panadería San Juan' : 'Ej. Comedor Popular Virgen de la Candelaria';
+    register.entidad.placeholder = role === 'donante' ? 'Ej. Panadería San Juan' : 'Ej. Olla Común Virgen de la Candelaria';
+    // Los campos del otro rol se ocultan y se desactivan para que no se validen ni se envíen.
+    document.querySelectorAll('[data-role-only]').forEach(field => {
+      field.hidden = field.dataset.roleOnly !== role;
+      field.querySelectorAll('input, select').forEach(input => { input.disabled = field.hidden; });
+    });
   };
   document.querySelectorAll('[data-register-role]').forEach(button => button.addEventListener('click', () => selectRole(button.dataset.registerRole)));
   selectRole(role);
@@ -103,10 +127,13 @@ document.addEventListener('DOMContentLoaded', () => {
     button.textContent = 'Creando tu cuenta…';
     try {
       const geographic = Object.fromEntries(['direccion', 'departamento', 'provincia', 'distrito', 'referencia'].map(name => [name, register.elements.namedItem(name).value.trim()]));
-      const perfil = { ...geographic, latitud: Number(register.latitud.value), longitud: Number(register.longitud.value), ubicacion_confirmada: true, responsable: register.nombre.value.trim() };
-      perfil[role === 'donante' ? 'nombre_establecimiento' : 'nombre'] = register.entidad.value.trim();
-      await REA.request('/api/auth/register', { method: 'POST', body: { nombre: register.nombre.value.trim(), correo: register.correo.value.trim(), telefono: register.telefono.value.trim(), contrasena: register.contrasena.value, rol: role, perfil } });
-      showMessage('Cuenta registrada. Tu perfil está pendiente de verificación administrativa. Ya puedes iniciar sesión para consultar su estado.', true);
+      const perfil = { ...geographic, latitud: Number(register.latitud.value), longitud: Number(register.longitud.value), ubicacion_confirmada: true, responsable: register.nombre.value.trim(), dni_representante: register.dni_representante.value };
+      if (role === 'donante') Object.assign(perfil, { nombre_establecimiento: register.entidad.value.trim(), ruc: register.ruc.value });
+      else Object.assign(perfil, { nombre: register.entidad.value.trim(), tipo_organizacion: register.tipo_organizacion.value, numero_beneficiarios: Number(register.numero_beneficiarios.value) });
+      const file = photoInput.files[0];
+      const foto = { tipo: file.type, datos: await readBase64(file) };
+      await REA.request('/api/auth/register', { method: 'POST', body: { nombre: register.nombre.value.trim(), correo: register.correo.value.trim().toLowerCase(), telefono: register.telefono.value.trim(), contrasena: register.contrasena.value, rol: role, perfil, foto } });
+      showMessage(role === 'donante' ? '¡Gracias por sumarte!' : 'Tu cuenta está PENDIENTE DE VERIFICACIÓN. Te contactaremos al celular o correo que registraste para coordinar. ¡Gracias por unirte a REAlimenta!', true);
       register.hidden = true;
       document.querySelector('[data-registration-success]').hidden = false;
     } catch (error) { showMessage(error.message); }

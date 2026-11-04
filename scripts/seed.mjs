@@ -16,9 +16,9 @@ const accounts = [
   { correo: 'admin@realimenta.test', nombre: 'Administrador de demostración', rol: 'administrador' }
 ];
 const items = [
-  { marker: 'PAN', alimento: 'Pan integral · demostración', categoria: 'Panadería', perfil: 'panaderia', cantidad: 30, unidad: 'unidades', description: 'Pan declarado por un donante ficticio. Solo para demostrar el flujo del MVP.', conservation: 'Temperatura ambiente', note: 'Mantener protegido en un lugar limpio y seco, según declaración de prueba.', cold: false, hours: 24 },
-  { marker: 'FRUTAS', alimento: 'Manzanas y plátanos · demostración', categoria: 'Frutas', perfil: 'frutas', cantidad: 12, unidad: 'kg', description: 'Fruta de demostración. No representa alimentos disponibles en un establecimiento real.', conservation: 'Temperatura ambiente', note: 'Declaración de demostración: proteger de golpes y contaminación.', cold: false, hours: 36 },
-  { marker: 'FRIO', alimento: 'Yogur envasado · demostración', categoria: 'Lácteos', perfil: 'refrigerado', cantidad: 18, unidad: 'unidades', description: 'Escenario de prueba con cadena de frío declarada. Sin certificación sanitaria.', conservation: 'Refrigerado', note: 'Requiere medios de conservación refrigerada según declaración del donante; verificar condiciones antes de coordinar.', cold: true, hours: 12 }
+  { marker: 'PAN', alimento: 'Pan integral · demostración', categoria: 'Panadería y complementos', perfil: 'panaderia', cantidad: 30, unidad: 'unidades', description: 'Pan declarado por un donante ficticio. Solo para demostrar el flujo del MVP.', conservation: 'Temperatura ambiente', note: 'Mantener protegido en un lugar limpio y seco, según declaración de prueba.', cold: false, hours: 24 },
+  { marker: 'FRUTAS', alimento: 'Manzanas y plátanos · demostración', categoria: 'Verduras, tubérculos y frutas', perfil: 'frutas', cantidad: 12, unidad: 'kg', description: 'Fruta de demostración. No representa alimentos disponibles en un establecimiento real.', conservation: 'Temperatura ambiente', note: 'Declaración de demostración: proteger de golpes y contaminación.', cold: false, hours: 36 },
+  { marker: 'FRIO', alimento: 'Yogur envasado · demostración', categoria: 'Lácteos y derivados', perfil: 'refrigerado', cantidad: 18, unidad: 'unidades', description: 'Escenario de prueba con cadena de frío declarada. Sin certificación sanitaria.', conservation: 'Refrigerado', note: 'Requiere medios de conservación refrigerada según declaración del donante; verificar condiciones antes de coordinar.', cold: true, hours: 12 }
 ];
 
 try {

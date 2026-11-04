@@ -61,7 +61,7 @@ async function createDonation(page, suffix) {
   const form = page.locator('#donation-form');
   await expect(form).toBeVisible();
   await form.locator('[name="alimento"]').fill(name);
-  await form.locator('[name="categoria"]').selectOption({ label: 'Panadería' });
+  await form.locator('[name="categoria"]').selectOption({ label: 'Panadería y complementos' });
   await form.locator('[name="cantidad"]').fill('12');
   await form.locator('[name="unidad"]').selectOption('unidades');
   await form.locator('[name="descripcion"]').fill('Registro de demostración creado mediante formularios durante la prueba UI automatizada.');
@@ -101,7 +101,7 @@ async function submitRequest(page) {
   await expect(form).toBeVisible();
   await form.locator('[name="fecha_propuesta"]').fill(limaInput(45));
   await form.locator('[name="transporte_declarado"]').fill('Vehículo de demostración para prueba UI');
-  await form.locator('[name="recipiente_declarado"]').fill('Contenedor cerrado de demostración');
+  await form.locator('[name="recipiente_declarado"]').fill('Contenedor cerrado de demostración'); await form.locator('[name="tiempo_llegada_min"]').fill('25');
   await form.locator('[name="observaciones"]').fill('Prueba UI auditable; datos de las cuentas públicas de demostración.');
   const [response] = await Promise.all([
     page.waitForResponse(r => /\/api\/donaciones\/\d+\/solicitudes$/.test(r.url()) && r.request().method() === 'POST'),

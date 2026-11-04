@@ -74,3 +74,52 @@
 .form-control[readonly] { background:#f3f6ef; color:#56664f; }
 /* Resumen de solicitud: foto del alimento junto al título. */
 .rp-hero .rp-thumb { width:84px; height:84px; object-fit:cover; border-radius:12px; margin-left:auto; flex-shrink:0; }
+/* Registro: vista previa de la foto de fachada o logo. */
+.local-photo-preview { display:block; width:160px; height:120px; object-fit:cover; margin-top:12px; border:1px solid #dfe7d5; border-radius:10px; background:white; }
+/* Foto de perfil (fachada o logo) con iniciales cuando no hay foto. */
+.profile-photo { display:inline-grid; place-items:center; flex:0 0 auto; width:44px; height:44px; overflow:hidden; border-radius:50%; background:#e6efdd; color:#0b7156; font-weight:700; font-size:.8rem; border:2px solid white; box-shadow:0 0 0 1px #d8e5ca; }
+.profile-photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.profile-photo.xs { width:24px; height:24px; font-size:.5rem; border-width:1px; }
+.profile-photo.sm { width:32px; height:32px; font-size:.6rem; }
+.profile-photo.md { width:48px; height:48px; }
+.profile-photo.lg { width:96px; height:96px; font-size:1.5rem; }
+.profile-photo.xl { width:132px; height:132px; font-size:2.2rem; border-width:4px; }
+.mvp-app .avatar img { width:100%; height:100%; object-fit:cover; border-radius:inherit; display:block; }
+.mvp-app .avatar { overflow:hidden; }
+.donation-by { display:flex; align-items:center; gap:7px; }
+.request-route-choice { display:flex; align-items:center; gap:9px; }
+.request-route-choice strong { flex:1; text-align:left; }
+.request-entity-note { display:block; color:#6f8661; font-size:.65rem; margin-top:2px; }
+/* Tarjeta "¿Quién dona?" / "¿Quién lo recibe?" con la foto grande del local. */
+.place-card .place-photo { width:100%; height:190px; object-fit:cover; border-radius:12px; margin:10px 0 12px; display:block; border:1px solid #dfe7d5; }
+.place-card .place-photo.empty { display:grid; place-items:center; gap:6px; align-content:center; background:#f3f6ec; color:#7a8d6c; font-size:.7rem; text-align:center; padding:12px; }
+.place-card .place-photo.empty i { font-size:1.6rem; color:#9db58f; }
+.place-card h2 { font-size:1.05rem; margin:0 0 6px; }
+.place-card p { font-size:.72rem; line-height:1.6; margin:4px 0; }
+.place-card p i { color:#0b7156; margin-right:4px; }
+/* Mi perfil */
+.profile-hero { display:flex; align-items:center; gap:26px; margin-bottom:20px; }
+.profile-hero h2 { font-size:1.6rem; margin:6px 0 4px; }
+.profile-hero p { margin:0 0 10px; color:#6f8661; font-size:.8rem; }
+.profile-photo-hint { margin-top:10px!important; }
+.profile-data-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.profile-data-panel h2 { font-size:1rem; margin:0 0 14px; }
+.profile-data-panel h2 i { color:#0b7156; margin-right:6px; }
+.profile-data-list { display:grid; gap:12px; margin:0; }
+.profile-data-list .mvp-pair dd { overflow-wrap:anywhere; }
+.profile-place-panel { grid-column:1/-1; }
+.profile-place-panel .profile-data-list { grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+.profile-map { height:240px; margin-top:16px; border-radius:12px; }
+.profile-photo-edit { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+.profile-photo-edit .local-photo-preview { width:96px; height:96px; border-radius:50%; margin:0; }
+.profile-photo-edit .photo-file-field { flex:1; min-width:220px; }
+@media (max-width: 760px) { .profile-hero { flex-direction:column; text-align:center; } .profile-data-grid { grid-template-columns:1fr; } }
+/* Vista previa de la donación: todos los datos por secciones. */
+.rp-sections { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:16px 0; }
+.rp-section { border:1px solid #e2e9d6; border-radius:12px; padding:13px 15px; background:#fbfcf8; }
+.rp-section h4 { margin:0 0 10px; font-size:.78rem; color:#28543e; }
+.rp-section h4 i { color:#0b7156; margin-right:5px; }
+.rp-section dl { margin:0; display:grid; gap:8px; }
+.rp-section dt { font-size:.58rem; color:#7a8d6c; text-transform:uppercase; letter-spacing:.04em; }
+.rp-section dd { margin:2px 0 0; font-size:.74rem; color:#1f3d2f; overflow-wrap:anywhere; }
+@media (max-width: 640px) { .rp-sections { grid-template-columns:1fr; } }

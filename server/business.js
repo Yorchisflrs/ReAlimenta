@@ -3,13 +3,14 @@ import { db, transaction, audit, placeholders } from './db.js';
 import { config } from './config.js';
 import { requireAuth, requireRole, requireVerified, userFromRow, publicUser, canSignIn, isDemoEmail } from './auth.js';
 import { fail } from './errors.js';
-import { id, text, optionalText, date, donationInput, profileInput, bool, phone, personName, words, optionalWords } from './validation.js';
+import { id, text, optionalText, number, date, donationInput, registrationProfile, registrationEmail, bool, phone, personName, words, optionalWords } from './validation.js';
 import { createTracking, custodySummaries } from './custody.js';
 import { evaluateLogistics, routeFromEvaluation, attachEvaluationDetails, pickupFromEvaluation, evaluationMatches } from './logistics.js';
-import { attachPhotos } from './photos.js';
+import { attachPhotos, saveLocalPhoto, removeLocalPhoto, removeDonationFiles } from './photos.js';
+import { unlink } from 'node:fs/promises';
 import {
   ACTIVE_REQUEST_STATES, PENDING_REQUEST_STATES, COLD_CHAIN_MESSAGE, donationFromRow, toDonationColumns, requestFields,
-  donorProfile, organizationProfile, evaluationFromRow, splitAddress, parseDetail, likePattern, likeEscape
+  donorProfile, organizationProfile, evaluationFromRow, splitAddress, parseDetail, likePattern, likeEscape, localPhotoUrl, storedFoodTypes
 } from './mappers.js';
 
 const ELIGIBLE_USER = "u.estado IN ('activo','pendiente')";
@@ -74,7 +75,8 @@ async function loadDonations(where, params, user, client = db) {
     donante_nombre: dt.nombre_establecimiento, donante_id_usuario: dt.id_usuario,
     donante_estado_verificacion: dt.estado_verificacion, donante_estado: u.estado,
     donante: { id_donante: dt.id_donante, nombre_establecimiento: dt.nombre_establecimiento, direccion: splitAddress(dt.direccion).direccion,
-      distrito: dt.distrito, latitud: dt.latitud, longitud: dt.longitud, es_demostracion: isDemoEmail(u.correo) },
+      referencia: splitAddress(dt.direccion).referencia, distrito: dt.distrito, latitud: dt.latitud, longitud: dt.longitud,
+      foto_url: localPhotoUrl(dt.foto_local), es_demostracion: isDemoEmail(u.correo) },
     solicitudes_count: Number(extra.solicitudes_count),
     cadena_custodia: null
   }));
@@ -147,7 +149,7 @@ businessRouter.get('/donaciones', async (req, res) => {
   if (req.user.rol === 'donante') add('d.id_donante = ?', req.user.perfil?.id_donante || -1);
   else if (req.user.rol === 'organizacion') conditions.push(CATALOG);
   if (req.query.q) add("CONCAT_WS(' ', d.nombre_alimento, d.descripcion, dt.nombre_establecimiento) LIKE ?", likePattern(String(req.query.q).slice(0, 150)));
-  if (req.query.categoria) add('d.categoria = ?', String(req.query.categoria).slice(0, 100));
+  if (req.query.categoria) { const names = storedFoodTypes(String(req.query.categoria).slice(0, 100)); add(`d.categoria IN (${placeholders(names)})`, ...names); }
   if (req.query.distrito) add('dt.distrito = ?', String(req.query.distrito).slice(0, 100));
   if (req.query.estado) { const estado = String(req.query.estado); add('d.estado = ?', DONATION_STATES[estado] || estado); }
   const where = `${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY d.fecha_creacion DESC, d.id_donacion DESC LIMIT 200`;
@@ -229,6 +231,24 @@ businessRouter.post('/donaciones/:id/cancelar', requireRole('donante'), async (r
   const [row] = await loadDonations('WHERE d.id_donacion = ?', [donationId], req.user);
   res.json({ data: { ...row, motivo_cancelacion: motivo } });
 });
+// Eliminar solo es posible si ninguna beneficiaria la solicitó: así no se borra el historial de nadie más.
+businessRouter.delete('/donaciones/:id', requireRole('donante'), async (req, res) => {
+  const donationId = id(req.params.id);
+  const files = await transaction(async client => {
+    const existing = await lockedDonation(client, donationId);
+    donationOwner(req, existing);
+    if ((await client.query('SELECT 1 FROM solicitudes WHERE id_donacion = ? LIMIT 1', [donationId])).rowCount)
+      fail(409, 'DONATION_HAS_REQUESTS', 'Esta donación ya recibió solicitudes y no se puede eliminar, para conservar el historial de las beneficiarias. Puedes cancelarla.');
+    const photos = (await client.query('SELECT nombre_archivo FROM donacion_fotos WHERE id_donacion = ?', [donationId])).rows.map(row => row.nombre_archivo);
+    for (const table of ['evaluaciones_ruta', 'notificaciones', 'seguimientos', 'donacion_fotos'])
+      await client.query(`DELETE FROM ${table} WHERE id_donacion = ?`, [donationId]);
+    await client.query('DELETE FROM donaciones WHERE id_donacion = ?', [donationId]);
+    await audit(client, req.user.id_usuario, 'donaciones', donationId, 'eliminar', { alimento: existing.nombre_alimento });
+    return photos;
+  });
+  await removeDonationFiles(files);
+  res.json({ data: { id_donacion: donationId, eliminada: true } });
+});
 
 businessRouter.get('/solicitudes', async (req, res) => {
   await expireDonations();
@@ -239,17 +259,81 @@ businessRouter.get('/solicitudes', async (req, res) => {
   if (req.query.estado) { params.push(String(req.query.estado)); conditions.push('s.estado = ?'); }
   res.json({ data: await loadRequests(`${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY s.fecha_solicitud DESC, s.id_solicitud DESC LIMIT 200`, params) });
 });
+function requestInput(body) {
+  return {
+    responsable_recojo: personName(body.responsable_recojo, 'nombre de quien recoge'),
+    telefono: phone(body.telefono),
+    transporte_declarado: words(body.transporte_declarado, 'transporte', 2, 100),
+    recipiente_declarado: words(body.recipiente_declarado, 'recipiente', 2, 100),
+    dispone_cadena_frio: bool(body.dispone_cadena_frio ?? false, 'dispone_cadena_frio'),
+    fecha_propuesta: date(body.fecha_propuesta, 'fecha propuesta'),
+    observaciones: optionalWords(body.observaciones, 'observaciones'),
+    tiempo_llegada_min: arrivalMinutes(body.tiempo_llegada_min)
+  };
+}
+// Lo declara la beneficiaria según cómo irá (combi, mototaxi, a pie): no se calcula con un servicio de rutas.
+function arrivalMinutes(value) {
+  const minutes = number(value, 'tiempo de llegada', 1, 600);
+  if (!Number.isInteger(minutes)) fail(422, 'VALIDATION_ERROR', 'El tiempo de llegada debe ser un número entero de minutos.');
+  return minutes;
+}
+function checkPickupTime(value, donation) {
+  const proposed = Date.parse(value.fecha_propuesta);
+  if (proposed < Date.now() || proposed < Date.parse(donation.fecha_disponibilidad) || proposed > Date.parse(donation.fecha_limite_recojo))
+    fail(422, 'INVALID_PICKUP_TIME', 'La fecha propuesta debe estar en el futuro y dentro de la ventana de disponibilidad y recojo.');
+}
+const requestColumns = (value, donation) => ({
+  cantidad_solicitada: donation.cantidad, responsable_recojo: value.responsable_recojo, telefono_recojo: value.telefono,
+  fecha_recojo_propuesta: new Date(value.fecha_propuesta), tipo_transporte: value.transporte_declarado, recipiente: value.recipiente_declarado,
+  mensaje: value.dispone_cadena_frio ? COLD_CHAIN_MESSAGE : null, observaciones: value.observaciones || null,
+  tiempo_llegada_min: value.tiempo_llegada_min
+});
+// La beneficiaria dueña de la solicitud, bloqueando primero la donación (mismo orden que las decisiones).
+async function ownRequest(client, req, requestId) {
+  const reference = (await client.query('SELECT id_donacion FROM solicitudes WHERE id_solicitud = ?', [requestId])).rows[0];
+  if (!reference) fail(404, 'REQUEST_NOT_FOUND', 'No se encontró la solicitud.');
+  const donation = await lockedDonation(client, reference.id_donacion);
+  const request = (await client.query('SELECT * FROM solicitudes WHERE id_solicitud = ? FOR UPDATE', [requestId])).rows[0];
+  if (request.id_organizacion !== req.user.perfil?.id_organizacion) fail(403, 'NOT_OWNER', 'Solo la beneficiaria solicitante puede modificar su solicitud.');
+  return { donation, request };
+}
+
+businessRouter.patch('/solicitudes/:id', requireRole('organizacion'), async (req, res) => {
+  requireVerified(req);
+  const value = requestInput(req.body);
+  const requestId = id(req.params.id);
+  await expireDonations();
+  await transaction(async client => {
+    const { donation, request } = await ownRequest(client, req, requestId);
+    if (!PENDING_REQUEST_STATES.includes(request.estado)) fail(409, 'INVALID_STATE', 'Solo se pueden editar solicitudes pendientes. Si ya fue respondida, envía una nueva.');
+    checkAvailable(donation);
+    checkPickupTime(value, donation);
+    const entries = Object.entries(requestColumns(value, donation));
+    await client.query(`UPDATE solicitudes SET ${entries.map(([key]) => `${key} = ?`).join(', ')} WHERE id_solicitud = ?`, [...entries.map(([, v]) => v), requestId]);
+    await audit(client, req.user.id_usuario, 'solicitudes', requestId, 'editar', { id_donacion: donation.id_donacion, cadena_frio_declarada: value.dispone_cadena_frio });
+  });
+  const [row] = await loadRequests('WHERE s.id_solicitud = ?', [requestId]);
+  res.json({ data: row });
+});
+// Una solicitud aceptada ya tiene recojo y custodia: esa no se elimina, se gestiona desde el seguimiento.
+businessRouter.delete('/solicitudes/:id', requireRole('organizacion'), async (req, res) => {
+  const requestId = id(req.params.id);
+  await transaction(async client => {
+    const { donation, request } = await ownRequest(client, req, requestId);
+    if (request.estado === 'aceptada') fail(409, 'REQUEST_ACCEPTED', 'Esta solicitud ya fue aceptada y no se puede eliminar. Coordina con el donante desde el seguimiento.');
+    for (const table of ['asignaciones', 'entregas', 'incidencias'])
+      if ((await client.query(`SELECT 1 FROM ${table} WHERE id_solicitud = ? LIMIT 1`, [requestId])).rowCount)
+        fail(409, 'REQUEST_HAS_HISTORY', 'Esta solicitud tiene recojo o incidencias registradas y no se puede eliminar.');
+    await client.query('DELETE FROM notificaciones WHERE id_solicitud = ?', [requestId]);
+    await client.query('DELETE FROM solicitudes WHERE id_solicitud = ?', [requestId]);
+    await audit(client, req.user.id_usuario, 'solicitudes', requestId, 'eliminar', { id_donacion: donation.id_donacion, estado_anterior: request.estado });
+  });
+  res.json({ data: { id_solicitud: requestId, eliminada: true } });
+});
+
 businessRouter.post('/donaciones/:id/solicitudes', requireRole('organizacion'), async (req, res) => {
   requireVerified(req);
-  const value = {
-    responsable_recojo: personName(req.body.responsable_recojo, 'nombre de quien recoge'),
-    telefono: phone(req.body.telefono),
-    transporte_declarado: words(req.body.transporte_declarado, 'transporte', 2, 100),
-    recipiente_declarado: words(req.body.recipiente_declarado, 'recipiente', 2, 100),
-    dispone_cadena_frio: bool(req.body.dispone_cadena_frio ?? false, 'dispone_cadena_frio'),
-    fecha_propuesta: date(req.body.fecha_propuesta, 'fecha propuesta'),
-    observaciones: optionalWords(req.body.observaciones, 'observaciones')
-  };
+  const value = requestInput(req.body);
   await expireDonations();
   const requestId = await transaction(async client => {
     const donation = await lockedDonation(client, id(req.params.id));
@@ -257,16 +341,9 @@ businessRouter.post('/donaciones/:id/solicitudes', requireRole('organizacion'), 
     const verifiedDonor = await client.query(`SELECT 1 FROM donantes d JOIN usuarios u ON u.id_usuario = d.id_usuario
       WHERE d.id_donante = ? AND d.estado_verificacion = 'verificado' AND ${ELIGIBLE_USER}`, [donation.id_donante]);
     if (!verifiedDonor.rowCount) fail(409, 'DONOR_UNAVAILABLE', 'El perfil donante no está habilitado para recibir solicitudes.');
-    const proposed = Date.parse(value.fecha_propuesta);
-    if (proposed < Date.now() || proposed < Date.parse(donation.fecha_disponibilidad) || proposed > Date.parse(donation.fecha_limite_recojo))
-      fail(422, 'INVALID_PICKUP_TIME', 'La fecha propuesta debe estar en el futuro y dentro de la ventana de disponibilidad y recojo.');
+    checkPickupTime(value, donation);
     const organizationId = req.user.perfil.id_organizacion;
-    const columns = {
-      cantidad_solicitada: donation.cantidad, responsable_recojo: value.responsable_recojo, telefono_recojo: value.telefono,
-      fecha_recojo_propuesta: new Date(value.fecha_propuesta), tipo_transporte: value.transporte_declarado, recipiente: value.recipiente_declarado,
-      mensaje: value.dispone_cadena_frio ? COLD_CHAIN_MESSAGE : null, observaciones: value.observaciones || null
-    };
-    const entries = Object.entries(columns);
+    const entries = Object.entries(requestColumns(value, donation));
     // solicitudes tiene UNIQUE(id_donacion, id_organizacion): una solicitud rechazada o cancelada se reenvía en la misma fila.
     const previous = (await client.query('SELECT id_solicitud, estado FROM solicitudes WHERE id_donacion = ? AND id_organizacion = ? FOR UPDATE', [donation.id_donacion, organizationId])).rows[0];
     let requestId;
@@ -339,28 +416,50 @@ for (const action of ['aceptar', 'rechazar', 'cancelar']) {
   });
 }
 
-businessRouter.get('/perfil', (req, res) => res.json({ data: { usuario: publicUser(req.user), perfil: req.user.perfil } }));
+// El DNI solo se entrega a su propio dueño: los perfiles que ve la otra parte no lo incluyen.
+const profileTable = role => role === 'donante' ? 'donantes' : 'organizaciones';
+async function ownProfile(user, client = db) {
+  if (user.rol === 'administrador' || !user.perfil) return user.perfil || {};
+  const row = (await client.query(`SELECT dni_representante FROM ${profileTable(user.rol)} WHERE id_usuario = ?`, [user.id_usuario])).rows[0];
+  return { ...user.perfil, dni_representante: row?.dni_representante || '' };
+}
+businessRouter.get('/perfil', async (req, res) => res.json({ data: { usuario: publicUser(req.user), perfil: await ownProfile(req.user) } }));
 businessRouter.patch('/perfil', async (req, res) => {
   const nombre = personName(req.body.nombre ?? req.user.nombre, 'nombre');
   const telefono = phone(req.body.telefono ?? req.user.telefono);
-  const result = await transaction(async client => {
-    let changedLocation = false;
-    if (req.user.rol !== 'administrador') {
-      const current = req.user.perfil;
-      const next = profileInput({ ...req.body, perfil: { ...current, ...(req.body.perfil || req.body) } }, req.user.rol);
-      const currentAddress = (await client.query(`SELECT direccion, distrito, latitud, longitud FROM ${req.user.rol === 'donante' ? 'donantes' : 'organizaciones'} WHERE id_usuario = ?`, [req.user.id_usuario])).rows[0] || {};
-      changedLocation = ['direccion', 'distrito', 'latitud', 'longitud'].some(key => String(currentAddress[key] ?? '') !== String(next[key] ?? ''));
-      const entries = Object.entries(next);
-      await client.query(`UPDATE ${req.user.rol === 'donante' ? 'donantes' : 'organizaciones'} SET ${entries.map(([key]) => `${key} = ?`).join(', ')}
-        WHERE id_usuario = ?`, [...entries.map(([, value]) => value), req.user.id_usuario]);
-    }
-    // El formulario usa un solo campo de nombre: si cambia, se guarda completo en "nombres".
-    if (nombre !== req.user.nombre) await client.query('UPDATE usuarios SET nombres = ?, apellidos = NULL, telefono = ? WHERE id_usuario = ?', [nombre, telefono, req.user.id_usuario]);
-    else await client.query('UPDATE usuarios SET telefono = ? WHERE id_usuario = ?', [telefono, req.user.id_usuario]);
-    await audit(client, req.user.id_usuario, 'usuarios', req.user.id_usuario, 'editar_perfil', { ubicacion_actualizada: changedLocation });
-    const user = await userFromRow((await client.query('SELECT * FROM usuarios WHERE id_usuario = ?', [req.user.id_usuario])).rows[0], client);
-    return { usuario: publicUser(user), perfil: user.perfil };
-  });
+  const correo = req.body.correo == null || req.body.correo === req.user.correo ? req.user.correo : registrationEmail(req.body.correo);
+  // Las cuentas de prueba conservan su correo: el inicio de sesión de demostración depende de él.
+  if (correo !== req.user.correo && isDemoEmail(req.user.correo)) fail(409, 'DEMO_EMAIL_LOCKED', 'El correo de una cuenta de prueba no se puede cambiar.');
+  const next = req.user.rol === 'administrador' ? null
+    : registrationProfile({ ...req.body, perfil: { ...req.user.perfil, ruc: undefined, tipo_organizacion: undefined, numero_beneficiarios: undefined, ...(req.body.perfil || req.body) } }, req.user.rol, true);
+  // Foto nueva opcional: se guarda antes y, si algo falla, se borra; la anterior se borra solo al confirmar.
+  const photo = next && req.body.foto ? await saveLocalPhoto(req.body.foto) : null;
+  let previousPhoto = null, result;
+  try {
+    result = await transaction(async client => {
+      if (correo !== req.user.correo && (await client.query('SELECT 1 FROM usuarios WHERE correo = ? AND id_usuario <> ?', [correo, req.user.id_usuario])).rowCount)
+        fail(409, 'EMAIL_IN_USE', 'Ya existe otra cuenta registrada con este correo.');
+      let changedLocation = false;
+      if (next) {
+        const table = profileTable(req.user.rol);
+        const current = (await client.query(`SELECT direccion, distrito, latitud, longitud, foto_local FROM ${table} WHERE id_usuario = ? FOR UPDATE`, [req.user.id_usuario])).rows[0] || {};
+        changedLocation = ['direccion', 'distrito', 'latitud', 'longitud'].some(key => String(current[key] ?? '') !== String(next[key] ?? ''));
+        if (photo) { next.foto_local = photo.relativePath; previousPhoto = current.foto_local; }
+        const entries = Object.entries(next);
+        await client.query(`UPDATE ${table} SET ${entries.map(([key]) => `${key} = ?`).join(', ')} WHERE id_usuario = ?`, [...entries.map(([, value]) => value), req.user.id_usuario]);
+      }
+      // El formulario usa un solo campo de nombre: si cambia, se guarda completo en "nombres".
+      if (nombre !== req.user.nombre) await client.query('UPDATE usuarios SET nombres = ?, apellidos = NULL, telefono = ?, correo = ? WHERE id_usuario = ?', [nombre, telefono, correo, req.user.id_usuario]);
+      else await client.query('UPDATE usuarios SET telefono = ?, correo = ? WHERE id_usuario = ?', [telefono, correo, req.user.id_usuario]);
+      await audit(client, req.user.id_usuario, 'usuarios', req.user.id_usuario, 'editar_perfil', { ubicacion_actualizada: changedLocation, correo_actualizado: correo !== req.user.correo, foto_actualizada: Boolean(photo) });
+      const user = await userFromRow((await client.query('SELECT * FROM usuarios WHERE id_usuario = ?', [req.user.id_usuario])).rows[0], client);
+      return { usuario: publicUser(user), perfil: await ownProfile(user, client) };
+    });
+  } catch (error) {
+    if (photo) await unlink(photo.destination).catch(cleanup => console.error('No se pudo eliminar la foto de perfil no guardada:', cleanup.message));
+    throw error;
+  }
+  if (previousPhoto && previousPhoto !== photo?.relativePath) await removeLocalPhoto(previousPhoto);
   res.json({ data: result });
 });
 

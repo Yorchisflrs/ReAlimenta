@@ -1,6 +1,6 @@
 import { fail } from './errors.js';
 import { composeAddress, FOOD_PROFILES } from './mappers.js';
-import { PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO } from './puno.js';
+import { PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO, DNI, RUC, TIPOS_ORGANIZACION, TIPOS_ALIMENTO } from './puno.js';
 
 export function text(value, field, min = 1, max = 300) {
   if (typeof value !== 'string' || value.trim().length < min || value.trim().length > max)
@@ -63,12 +63,12 @@ export function loginEmail(value) {
 }
 export function registrationEmail(value) {
   const correo = loginEmail(value);
-  if (!new RegExp(CORREO_REGISTRO).test(correo)) fail(422, 'EMAIL_NOT_ALLOWED', 'Regístrese con su correo Gmail (@gmail.com) o con un correo institucional peruano (por ejemplo @unap.edu.pe o @munipuno.gob.pe).');
+  if (!new RegExp(CORREO_REGISTRO).test(correo)) fail(422, 'INVALID_EMAIL', 'Ingrese un correo con la forma usuario@dominio.com, sin ñ, tildes ni espacios.');
   return correo;
 }
 export function password(value) {
-  if (typeof value !== 'string' || value.length < 12 || value.length > 128)
-    fail(422, 'INVALID_PASSWORD', 'La contraseña debe contener entre 12 y 128 caracteres.');
+  if (typeof value !== 'string' || value.length < 8 || value.length > 128)
+    fail(422, 'INVALID_PASSWORD', 'La contraseña debe contener entre 8 y 128 caracteres.');
   if (!/\p{L}/u.test(value) || !/\d/.test(value)) fail(422, 'INVALID_PASSWORD', 'La contraseña debe tener al menos una letra y un número.');
   return value;
 }
@@ -109,6 +109,41 @@ export function profileInput(body, role) {
   return result;
 }
 
+// Registro público: además de la ubicación exige DNI del representante y, según el rol, RUC o tipo y beneficiarios.
+// Con partial (edición del perfil) solo se validan los datos enviados; los demás se conservan.
+export function registrationProfile(body, role, partial = false) {
+  const data = body.perfil || body;
+  const result = profileInput(body, role);
+  const given = key => !partial || (data[key] !== undefined && data[key] !== null && data[key] !== '');
+  if (given('dni_representante')) {
+    if (!new RegExp(DNI).test(typeof data.dni_representante === 'string' ? data.dni_representante : ''))
+      fail(422, 'INVALID_DNI', 'El DNI del representante debe tener exactamente 8 números.');
+    result.dni_representante = data.dni_representante;
+  }
+  if (role === 'donante') {
+    if (given('ruc')) {
+      if (!new RegExp(RUC).test(typeof data.ruc === 'string' ? data.ruc : '')) fail(422, 'INVALID_RUC', 'El RUC debe tener exactamente 11 números.');
+      result.ruc = data.ruc;
+    }
+  } else {
+    if (given('tipo_organizacion')) {
+      if (!TIPOS_ORGANIZACION.includes(data.tipo_organizacion)) fail(422, 'INVALID_ORGANIZATION_TYPE', `Elija el tipo de organización: ${TIPOS_ORGANIZACION.join(', ')}.`);
+      result.tipo_organizacion = data.tipo_organizacion;
+    }
+    if (given('numero_beneficiarios')) {
+      const people = number(data.numero_beneficiarios, 'número de personas beneficiadas', 1, 100000);
+      if (!Number.isInteger(people)) fail(422, 'VALIDATION_ERROR', 'El número de personas beneficiadas debe ser un número entero.');
+      result.numero_beneficiarios = people;
+    }
+  }
+  return result;
+}
+
+function foodTypeInput(value) {
+  if (!TIPOS_ALIMENTO.includes(value)) fail(422, 'INVALID_FOOD_TYPE', `Elija el tipo de alimento: ${TIPOS_ALIMENTO.join(', ')}.`);
+  return value;
+}
+
 // cantidad es decimal(12,2) en MySQL.
 function quantity(value) {
   // Tope razonable para la donación de un establecimiento: evita cifras escritas por error.
@@ -124,7 +159,7 @@ export function donationInput(body) {
   const value = {
     perfil_alimento: foodProfile,
     alimento: words(body.alimento, 'alimento', 2, 200),
-    categoria: text(body.categoria, 'categoría', 2, 100),
+    categoria: foodTypeInput(body.categoria),
     cantidad: quantity(body.cantidad),
     unidad: text(body.unidad, 'unidad', 1, 50),
     descripcion: optionalWords(body.descripcion, 'descripción'),

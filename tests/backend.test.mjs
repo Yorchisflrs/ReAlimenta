@@ -2,6 +2,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import net from 'node:net';
+import path from 'node:path';
 import http from 'node:http';
 import { promisify } from 'node:util';
 import { startSandbox, SANDBOX_DATABASE } from './helpers/mysql-sandbox.mjs';
@@ -31,7 +32,7 @@ async function login(name) {
   return { cookie: result.response.headers.get('set-cookie').split(';')[0], csrfToken: result.data.csrfToken, user: result.data.user };
 }
 function donation(overrides = {}) {
-  return { alimento: 'Pan integral de prueba', categoria: 'Panadería', cantidad: 30, unidad: 'unidades', descripcion: 'Registro de prueba automatizada en base aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público de prueba en Puno', distrito: 'Puno', latitud_recojo: -15.8402, longitud_recojo: -70.0278, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba', ...overrides };
+  return { alimento: 'Pan integral de prueba', categoria: 'Panadería y complementos', cantidad: 30, unidad: 'unidades', descripcion: 'Registro de prueba automatizada en base aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público de prueba en Puno', distrito: 'Puno', latitud_recojo: -15.8402, longitud_recojo: -70.0278, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba', ...overrides };
 }
 async function createDonation(overrides = {}) {
   const result = await call('POST', '/api/donaciones', donation(overrides), accounts.donante);
@@ -39,7 +40,7 @@ async function createDonation(overrides = {}) {
   return result.data.data;
 }
 function request(overrides = {}) {
-  return { responsable_recojo: 'Responsable de prueba', telefono: '951000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString(), observaciones: 'Prueba automatizada.', ...overrides };
+  return { responsable_recojo: 'Responsable de prueba', tiempo_llegada_min: 25, telefono: '951000000', transporte_declarado: 'Vehículo de prueba', recipiente_declarado: 'Caja de prueba', dispone_cadena_frio: false, fecha_propuesta: new Date(Date.now() + 3600000).toISOString(), observaciones: 'Prueba automatizada.', ...overrides };
 }
 async function createRequest(donationId, account = accounts.organizacion, overrides = {}) {
   const result = await call('POST', `/api/donaciones/${donationId}/solicitudes`, request(overrides), account);
@@ -264,21 +265,37 @@ test('Seguridad: autenticación, roles, CSRF, Origin, páginas y archivos privad
 });
 
 test('Registro público: administrador prohibido, usuario pendiente, perfil pendiente y datos geográficos persistentes', async () => {
-  const payload = { nombre: 'Donante registrado de prueba', correo: 'nuevo.donante@gmail.com', telefono: '951000000', rol: 'donante', contrasena: password, perfil: { nombre_establecimiento: 'Donante nuevo', direccion: 'Punto de prueba Puno', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', referencia: 'Frente al parque', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } };
+  const { default: sharp } = await import('sharp');
+  const foto = { tipo: 'image/png', datos: (await sharp({ create: { width: 40, height: 30, channels: 3, background: '#0b7156' } }).png().toBuffer()).toString('base64') };
+  const payload = { nombre: 'Donante registrado de prueba', correo: 'nuevo.donante@gmail.com', telefono: '951000000', rol: 'donante', contrasena: password, foto, perfil: { nombre_establecimiento: 'Donante nuevo', ruc: '20123456789', dni_representante: '71234567', direccion: 'Punto de prueba Puno', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', referencia: 'Frente al parque', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } };
   assert.equal((await call('POST', '/api/auth/register', { ...payload, rol: 'administrador' })).status, 422);
   assert.equal((await call('POST', '/api/auth/register', { ...payload, perfil: { ...payload.perfil, ubicacion_confirmada: false } })).status, 422);
   assert.equal((await call('POST', '/api/auth/register', { ...payload, telefono: '1'.repeat(21) })).status, 422);
-  // Reglas de Puno/Perú: correo Gmail o institucional .pe, teléfono peruano, nombre con letras y ubicación dentro de Puno.
-  for (const override of [{ correo: 'alguien@hotmail.com' }, { correo: 'alguien@empresa.com' }, { telefono: '95123456a' }, { telefono: '851234567' }, { nombre: 'Juan123 Pérez' }, { nombre: 'Juan' }, { contrasena: 'solamenteletras' },
+  // Reglas del registro: correo usuario@dominio.extension, teléfono de 9 dígitos, DNI de 8, RUC de 11, contraseña de 8 con letras y números, foto y ubicación en Puno.
+  for (const override of [{ correo: 'peña@gmail.com' }, { correo: 'ana maria@gmail.com' }, { correo: 'alguien@dominio' }, { telefono: '95123456a' }, { telefono: '851234567' }, { nombre: 'Juan123 Pérez' }, { nombre: 'Juan' },
+    { contrasena: 'solamenteletras' }, { contrasena: 'abc1234' }, { foto: undefined }, { foto: { tipo: 'image/png', datos: Buffer.from('no es imagen').toString('base64') } },
+    { perfil: { ...payload.perfil, dni_representante: '1234567' } }, { perfil: { ...payload.perfil, dni_representante: '1234567a' } }, { perfil: { ...payload.perfil, ruc: '2012345678' } }, { perfil: { ...payload.perfil, ruc: undefined } },
     { perfil: { ...payload.perfil, distrito: 'Miraflores' } }, { perfil: { ...payload.perfil, provincia: 'Lima' } }, { perfil: { ...payload.perfil, latitud: -12.04, longitud: -77.03 } }, { perfil: { ...payload.perfil, direccion: '12345' } }])
-    assert.equal((await call('POST', '/api/auth/register', { ...payload, ...override })).status, 422, JSON.stringify(override));
+    assert.equal((await call('POST', '/api/auth/register', { ...payload, ...override })).status, 422, JSON.stringify(override).slice(0, 200));
   assert.equal((await call('POST', '/api/auth/register', { ...payload, correo: 'mesa.partes@unap.edu.pe', nombre: 'Ana Quispe Mamani', telefono: '051 365 000', perfil: { ...payload.perfil, provincia: 'San Román', distrito: 'Juliaca', latitud: -15.5, longitud: -70.13 } })).status, 201);
+  // Beneficiaria: tipo de organización de la lista y número de personas beneficiadas.
+  const organization = { ...payload, correo: 'olla.comun@hotmail.com', rol: 'organizacion', perfil: { ...payload.perfil, ruc: undefined, nombre_establecimiento: undefined, nombre: 'Olla Común Los Andes', tipo_organizacion: 'Olla Común', numero_beneficiarios: 60 } };
+  for (const override of [{ tipo_organizacion: 'Albergue' }, { numero_beneficiarios: 0 }, { numero_beneficiarios: 2.5 }])
+    assert.equal((await call('POST', '/api/auth/register', { ...organization, perfil: { ...organization.perfil, ...override } })).status, 422, JSON.stringify(override));
+  const created = await call('POST', '/api/auth/register', organization);
+  assert.equal(created.status, 201);
+  const beneficiary = await one('SELECT * FROM organizaciones WHERE id_usuario = ?', [created.data.data.id_usuario]);
+  assert.equal(beneficiary.tipo_organizacion, 'Olla Común'); assert.equal(beneficiary.numero_beneficiarios, 60); assert.equal(beneficiary.dni_representante, '71234567');
   const result = await call('POST', '/api/auth/register', payload);
   assert.equal(result.status, 201); assert.equal(result.data.data.estado_verificacion, 'pendiente');
   const user = await one('SELECT * FROM usuarios WHERE id_usuario = ?', [result.data.data.id_usuario]);
   assert.equal(user.nombres, payload.nombre); assert.equal(user.estado, 'pendiente'); assert.equal(user.rol, 'donante'); assert.match(user.password_hash, /^scrypt\$/);
   const row = await one('SELECT * FROM donantes WHERE id_usuario = ?', [result.data.data.id_usuario]);
   assert.equal(row.latitud, -15.84); assert.equal(row.estado_verificacion, 'pendiente'); assert.equal(row.responsable, payload.nombre);
+  assert.equal(row.ruc, '20123456789'); assert.equal(row.dni_representante, '71234567'); assert.match(row.foto_local, /locales\/local_[a-f0-9]{16}\.webp$/);
+  const { readdir } = await import('node:fs/promises');
+  // Solo quedan en la carpeta las fotos de los registros guardados: los rechazados no dejan archivos huérfanos.
+  assert.equal((await readdir(path.join(path.dirname(sandbox.uploads), 'locales'))).length, 3);
   const loginResult = await call('POST', '/api/auth/login', { correo: payload.correo, contrasena: password });
   assert.equal(loginResult.status, 200);
   assert.equal(loginResult.data.user.perfil.referencia, 'Frente al parque'); assert.equal(loginResult.data.user.perfil.ubicacion_confirmada, true);
@@ -299,7 +316,7 @@ test('Donaciones: creación, consulta, filtro, detalle, edición y cancelación 
   assert.equal(Math.abs(row.fecha_limite_recojo - new Date(created.fecha_limite_recojo)) < 1000, true);
   const detail = (await call('GET', `/api/donaciones/${created.id_donacion}`, undefined, accounts.donante)).data.data;
   assert.equal(detail.alimento, created.alimento); assert.equal(detail.referencia, 'Puerta lateral'); assert.equal(detail.distrito, 'Puno');
-  let catalog = await call('GET', '/api/donaciones?q=Pan%20integral&categoria=Panader%C3%ADa&distrito=Puno', undefined, accounts.organizacion);
+  let catalog = await call('GET', '/api/donaciones?q=Pan%20integral&categoria=Panader%C3%ADa%20y%20complementos&distrito=Puno', undefined, accounts.organizacion);
   assert.ok(catalog.data.data.some(d => d.id_donacion === created.id_donacion));
   assert.ok(!(await call('GET', '/api/donaciones?q=%25%25no-coincide', undefined, accounts.organizacion)).data.data.some(d => d.id_donacion === created.id_donacion));
   const edited = await call('PATCH', `/api/donaciones/${created.id_donacion}`, { cantidad: 35.257, alimento: 'Pan actualizado' }, accounts.donante);
@@ -499,4 +516,103 @@ test('Auditoría respeta acceso por actor, donante propietario y administrador',
   assert.ok(admin.data.data.every(row => row.entidad && row.accion && row.fecha_evento));
   assert.equal(org.status, 200);
   assert.ok(!org.data.data.some(row => row.accion === 'iniciar_sesion' && row.id_usuario === accounts.admin.user.id_usuario));
+});
+
+test('Tipos de alimento: solo los 7 tipos actuales y las categorías antiguas se muestran con el tipo nuevo', async () => {
+  assert.equal((await call('POST', '/api/donaciones', donation({ categoria: 'Bebidas' }), accounts.donante)).status, 422);
+  const created = await createDonation({ categoria: 'Conservas y enlatados' });
+  assert.equal(created.categoria, 'Conservas y enlatados');
+  await db.query("UPDATE donaciones SET categoria = 'Lácteos' WHERE id_donacion = ?", [created.id_donacion]);
+  const detail = (await call('GET', `/api/donaciones/${created.id_donacion}`, undefined, accounts.donante)).data.data;
+  assert.equal(detail.categoria, 'Lácteos y derivados');
+  const filtered = (await call('GET', `/api/donaciones?categoria=${encodeURIComponent('Lácteos y derivados')}`, undefined, accounts.donante)).data.data;
+  assert.ok(filtered.some(d => d.id_donacion === created.id_donacion));
+});
+
+test('Eliminar y editar: donación sin solicitudes se borra; solicitud pendiente se edita y se elimina', async () => {
+  const lonely = await createDonation();
+  assert.equal((await call('DELETE', `/api/donaciones/${lonely.id_donacion}`, undefined, accounts.organizacion)).status, 403);
+  assert.equal((await call('DELETE', `/api/donaciones/${lonely.id_donacion}`, undefined, accounts.donante)).status, 200);
+  assert.equal(await one('SELECT * FROM donaciones WHERE id_donacion = ?', [lonely.id_donacion]), undefined);
+  const d = await createDonation(), s = await createRequest(d.id_donacion);
+  assert.equal((await call('DELETE', `/api/donaciones/${d.id_donacion}`, undefined, accounts.donante)).status, 409);
+  const edited = await call('PATCH', `/api/solicitudes/${s.id_solicitud}`, request({ transporte_declarado: 'Mototaxi azul' }), accounts.organizacion);
+  assert.equal(edited.status, 200, JSON.stringify(edited.data)); assert.equal(edited.data.data.transporte_declarado, 'Mototaxi azul');
+  assert.equal((await call('PATCH', `/api/solicitudes/${s.id_solicitud}`, request(), accounts.organizacion2)).status, 403);
+  assert.equal((await call('DELETE', `/api/solicitudes/${s.id_solicitud}`, undefined, accounts.organizacion2)).status, 403);
+  assert.equal((await call('DELETE', `/api/solicitudes/${s.id_solicitud}`, undefined, accounts.organizacion)).status, 200);
+  assert.equal(await one('SELECT * FROM solicitudes WHERE id_solicitud = ?', [s.id_solicitud]), undefined);
+  // Una solicitud aceptada ya tiene recojo: no se edita ni se elimina.
+  const { s: taken } = await accepted();
+  assert.equal((await call('PATCH', `/api/solicitudes/${taken.id_solicitud}`, request(), accounts.organizacion)).status, 409);
+  assert.equal((await call('DELETE', `/api/solicitudes/${taken.id_solicitud}`, undefined, accounts.organizacion)).status, 409);
+});
+
+test('Perfil: edición completa con foto, DNI privado y fotos visibles solo entre partes relacionadas', async () => {
+  const { default: sharp } = await import('sharp');
+  const foto = { tipo: 'image/png', datos: (await sharp({ create: { width: 30, height: 30, channels: 3, background: '#c0603a' } }).png().toBuffer()).toString('base64') };
+  const me = (await call('GET', '/api/perfil', undefined, accounts.donante)).data.data;
+  const body = { nombre: me.usuario.nombre, telefono: '951222333', correo: me.usuario.correo, foto, perfil: { ...me.perfil, ruc: '20999888777', dni_representante: '40111222' } };
+  assert.equal((await call('PATCH', '/api/perfil', { ...body, perfil: { ...body.perfil, ruc: '123' } }, accounts.donante)).status, 422);
+  const saved = await call('PATCH', '/api/perfil', body, accounts.donante);
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal(saved.data.data.perfil.ruc, '20999888777'); assert.equal(saved.data.data.perfil.dni_representante, '40111222');
+  const url = saved.data.data.perfil.foto_url;
+  assert.match(url, /^\/media\/locales\/local_[a-f0-9]{16}\.webp$/);
+  assert.equal((await call('GET', url, undefined, accounts.donante)).response.headers.get('content-type'), 'image/webp');
+  assert.equal((await call('GET', url)).status, 401);
+  // La beneficiaria ve la foto del donante (tiene donaciones en su catálogo), pero nunca su DNI.
+  await createDonation();
+  assert.equal((await call('GET', url, undefined, accounts.organizacion)).status, 200);
+  const catalog = (await call('GET', '/api/donaciones', undefined, accounts.organizacion)).data.data;
+  assert.equal(catalog.find(d => d.donante?.foto_url)?.donante.foto_url, url);
+  assert.doesNotMatch(JSON.stringify(catalog), /40111222/);
+  // Foto de la beneficiaria: el donante la ve solo si ella le envió una solicitud (organización nueva, sin relación previa).
+  const orgEmail = 'vaso.leche.nuevo@gmail.com';
+  const registered = await call('POST', '/api/auth/register', { nombre: 'Elena Mamani Choque', correo: orgEmail, telefono: '951666777', rol: 'organizacion', contrasena: 'vaso12345', foto, perfil: { nombre: 'Vaso de Leche Barrio Bellavista', tipo_organizacion: 'Vaso de Leche', numero_beneficiarios: 45, dni_representante: '42424242', direccion: 'Jr. Ayacucho 300', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } });
+  assert.equal(registered.status, 201, JSON.stringify(registered.data));
+  await db.query("UPDATE organizaciones SET estado_verificacion = 'verificado' WHERE id_usuario = ?", [registered.data.data.id_usuario]);
+  const orgLogin = await call('POST', '/api/auth/login', { correo: orgEmail, contrasena: 'vaso12345' });
+  const newOrg = { cookie: orgLogin.response.headers.get('set-cookie').split(';')[0], csrfToken: orgLogin.data.csrfToken };
+  const orgUrl = orgLogin.data.user.perfil.foto_url;
+  assert.match(orgUrl, /^\/media\/locales\//);
+  assert.equal((await call('GET', orgUrl, undefined, accounts.donante)).status, 404);
+  const d = await createDonation(); await createRequest(d.id_donacion, newOrg);
+  assert.equal((await call('GET', orgUrl, undefined, accounts.donante)).status, 200);
+  const received = (await call('GET', '/api/solicitudes', undefined, accounts.donante)).data.data;
+  assert.equal(received.find(r => r.organizacion?.nombre === 'Vaso de Leche Barrio Bellavista')?.organizacion.foto_url, orgUrl);
+  assert.doesNotMatch(JSON.stringify(received), /42424242/);
+  // La foto anterior se borra al reemplazarla.
+  const previous = path.basename(url);
+  const replaced = await call('PATCH', '/api/perfil', body, accounts.donante);
+  assert.notEqual(replaced.data.data.perfil.foto_url, url);
+  const { readdir } = await import('node:fs/promises');
+  assert.ok(!(await readdir(path.join(path.dirname(sandbox.uploads), 'locales'))).includes(previous));
+});
+
+test('Cambio de contraseña desde el perfil: exige la actual y renueva la sesión', async () => {
+  const { default: sharp } = await import('sharp');
+  const foto = { tipo: 'image/png', datos: (await sharp({ create: { width: 20, height: 20, channels: 3, background: '#0b7156' } }).png().toBuffer()).toString('base64') };
+  const correo = 'cambio.clave@gmail.com';
+  assert.equal((await call('POST', '/api/auth/register', { nombre: 'Lucía Condori Ramos', correo, telefono: '951444555', rol: 'organizacion', contrasena: 'clave1234', foto, perfil: { nombre: 'Comedor Popular Central', tipo_organizacion: 'Comedor Popular', numero_beneficiarios: 80, dni_representante: '45454545', direccion: 'Jr. Moquegua 210', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } })).status, 201);
+  const logged = await call('POST', '/api/auth/login', { correo, contrasena: 'clave1234' });
+  const account = { cookie: logged.response.headers.get('set-cookie').split(';')[0], csrfToken: logged.data.csrfToken };
+  assert.equal((await call('POST', '/api/auth/contrasena', { actual: 'incorrecta1', nueva: 'nueva12345' }, account)).status, 422);
+  const changed = await call('POST', '/api/auth/contrasena', { actual: 'clave1234', nueva: 'nueva12345' }, account);
+  assert.equal(changed.status, 200);
+  assert.equal((await call('GET', '/api/auth/me', undefined, account)).status, 401);
+  const renewed = { cookie: changed.response.headers.get('set-cookie').split(';')[0], csrfToken: changed.data.csrfToken };
+  assert.equal((await call('GET', '/api/auth/me', undefined, renewed)).status, 200);
+  assert.equal((await call('POST', '/api/auth/login', { correo, contrasena: 'nueva12345' })).status, 200);
+});
+
+test('Tiempo de llegada: la beneficiaria lo declara al solicitar y el donante lo ve', async () => {
+  const d = await createDonation();
+  for (const value of [undefined, 0, 601, 12.5, 'veinte'])
+    assert.equal((await call('POST', `/api/donaciones/${d.id_donacion}/solicitudes`, request({ tiempo_llegada_min: value }), accounts.organizacion)).status, 422, String(value));
+  const s = await createRequest(d.id_donacion, accounts.organizacion, { tiempo_llegada_min: 45 });
+  assert.equal(s.tiempo_llegada_min, 45);
+  const received = (await call('GET', `/api/solicitudes?id_donacion=${d.id_donacion}`, undefined, accounts.donante)).data.data;
+  assert.equal(received[0].tiempo_llegada_min, 45);
+  assert.equal((await call('PATCH', `/api/solicitudes/${s.id_solicitud}`, request({ tiempo_llegada_min: 30 }), accounts.organizacion)).data.data.tiempo_llegada_min, 30);
 });
