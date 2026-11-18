@@ -1,4 +1,4 @@
-/* Mapas con Leaflet: marcar ubicaciones y mostrar puntos. No se calculan rutas ni tiempos de viaje. */
+/* Mapas con Leaflet: ubicaciones y recorridos recibidos del servicio de rutas. */
 (() => {
   const maps = new WeakMap();
   const active = new Set();
@@ -57,11 +57,11 @@
     if (!response.ok) throw new Error(result.error?.message || 'No se pudo buscar la dirección.');
     return result.data;
   }
-  // A: lugar de recojo (donante) · B: beneficiaria. Sin línea de ruta: el tiempo lo declara la beneficiaria.
+  // A: lugar de recojo (donante) · B: beneficiaria.
   function showPlaces(container, route) {
     const map = canvas(container);
     if (!map) return null;
-    const valid = point => point && Number.isFinite(Number(point.latitud)) && Number.isFinite(Number(point.longitud)) && point.latitud !== null && point.longitud !== null;
+    const valid = point => point && point.latitud !== '' && point.longitud !== '' && point.latitud != null && point.longitud != null && Number.isFinite(Number(point.latitud)) && Number.isFinite(Number(point.longitud));
     if (!valid(route?.origen) || !valid(route?.destino)) {
       removeMap(map.getContainer());
       if (typeof container === 'string') container = document.querySelector(container);
@@ -71,7 +71,12 @@
     const popup=(label,point)=>{const node=document.createElement('div');const strong=document.createElement('strong');strong.textContent=`${label} · ${point.nombre||''}`;node.append(strong);if(point.direccion){const p=document.createElement('p');p.textContent=point.direccion;node.append(p);}return node;};
     L.marker([route.origen.latitud, route.origen.longitud], { icon: markerIcon('A','#087f5b'),title:'A · Lugar de recojo' }).addTo(map).bindPopup(popup('A · Lugar de recojo',route.origen));
     L.marker([route.destino.latitud, route.destino.longitud], { icon: markerIcon('B','#ef8d3c'),title:'B · Beneficiaria' }).addTo(map).bindPopup(popup('B · Beneficiaria',route.destino));
-    map.fitBounds(L.latLngBounds([[route.origen.latitud, route.origen.longitud], [route.destino.latitud, route.destino.longitud]]), { padding: [45,45], maxZoom: 16, animate:false });
+    const points = L.latLngBounds([[route.origen.latitud, route.origen.longitud], [route.destino.latitud, route.destino.longitud]]);
+    if(route.geometry?.type === 'LineString' && Array.isArray(route.geometry.coordinates)) {
+      const line = L.geoJSON(route.geometry, { style: { color: '#087f5b', weight: 5, opacity: .85 } }).addTo(map);
+      if(line.getBounds().isValid())points.extend(line.getBounds());
+    }
+    map.fitBounds(points, { padding: [45,45], maxZoom: 16, animate:false });
     return map;
   }
   // Mapa simple de llegada: el punto de recojo es fijo y el punto de salida se marca tocando el mapa.

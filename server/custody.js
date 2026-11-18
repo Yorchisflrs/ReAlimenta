@@ -155,7 +155,7 @@ function trackingFromRow({ e, s, d, dt, o, ud, uo }, c) {
     responsable_entrega: e.responsable_entrega, responsable_recepcion: e.responsable_recepcion,
     fecha_recojo: e.fecha_recojo, fecha_entrega: e.fecha_entrega, fecha_confirmacion: e.fecha_confirmacion,
     // Contacto para coordinar el recojo: cada parte ve el teléfono de la otra solo dentro de este seguimiento.
-    origen: { nombre: dt.nombre_establecimiento, direccion: d.direccion_recojo || '', distrito: dt.distrito || '', latitud: d.latitud, longitud: d.longitud, responsable: dt.responsable || '', telefono: ud.donante_telefono || '' },
+    origen: { nombre: dt.nombre_establecimiento, direccion: d.direccion_recojo || '', distrito: donacion.distrito || '', latitud: d.latitud, longitud: d.longitud, responsable: dt.responsable || '', telefono: ud.donante_telefono || '' },
     destino: { nombre: o.nombre, direccion: splitAddress(o.direccion).direccion, distrito: o.distrito || '', latitud: o.latitud, longitud: o.longitud, responsable: s.responsable_recojo || '', telefono: s.telefono_recojo || '' },
     version: c.version, fecha_inicio: c.hitos[0]?.fecha_evento || null, fecha_actualizacion: c.fecha_actualizacion,
     solicitud_estado: s.estado, fecha_propuesta: s.fecha_recojo_propuesta, tiempo_llegada_min: s.tiempo_llegada_min ?? null, dispone_cadena_frio: coldChainDeclared(s.mensaje),
