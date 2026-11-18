@@ -13,6 +13,10 @@ import { custodyRouter } from './custody.js';
 import { photoRouter,mediaRouter,localMediaRouter } from './photos.js';
 import { recoveryRouter } from './recovery.js';
 import { browserScript } from './puno.js';
+import { notificationRouter } from './notifications.js';
+import { adminRouter } from './admin.js';
+import { verificationRouter, documentMediaRouter } from './verification.js';
+import { ensureCatalogs, activeValues } from './catalogs.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export { pool };
@@ -40,6 +44,8 @@ export function createApp() {
   const smallJson = express.json({ limit: '64kb' }), photoJson = express.json({ limit: '8mb' });
   app.use((req, res, next) => (['/api/auth/register', '/api/perfil'].includes(req.path) ? photoJson : smallJson)(req, res, next));
   app.use((req, res, next) => { if (!req.body) req.body = {}; next(); });
+  // Las listas que configura el administrador (tipos de beneficiaria y de alimento) se leen una vez y quedan en memoria.
+  app.use(async (req, res, next) => { await ensureCatalogs(); next(); });
   app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   app.use('/api', checkOrigin);
   app.get('/api/health', async (req, res) => {
@@ -69,13 +75,17 @@ export function createApp() {
   app.use('/api', loadSession, csrf);
   app.use('/api/auth', authRouter);
   app.use('/api/auth', recoveryRouter);
-  app.use('/api', createLogisticsRouter({ db, requireAuth }));
+  app.use('/api', createLogisticsRouter());
+  app.use('/api', notificationRouter);
+  app.use('/api', adminRouter);
+  app.use('/api', verificationRouter);
   app.use('/api', photoRouter);
   app.use('/api', custodyRouter);
   app.use('/api', businessRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No existe este recurso de la API.' } }));
   app.use('/media/donaciones',loadSession,mediaRouter);
   app.use('/media/locales',loadSession,localMediaRouter);
+  app.use('/media/verificaciones', loadSession, documentMediaRouter);
 
   const pages = { donante: 'donante.html', organizacion: 'organizacion.html', administrador: 'administrador.html' };
   for (const [role, name] of Object.entries(pages)) {
@@ -89,7 +99,7 @@ export function createApp() {
   app.get('/', (req, res) => res.sendFile(path.join(root, 'index.html')));
   for (const name of ['index.html', 'login.html', 'registro.html','recuperar.html']) app.get(`/${name}`, (req, res) => res.sendFile(path.join(root, name)));
   // Catálogo de provincias/distritos y patrones de validación, generado desde server/puno.js.
-  app.get('/js/puno.js', (req, res) => res.type('application/javascript').send(browserScript()));
+  app.get('/js/puno.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(browserScript({ TIPOS_ORGANIZACION: activeValues('tipo_organizacion'), TIPOS_ALIMENTO: activeValues('tipo_alimento') })));
   for (const directory of ['assets', 'css', 'js']) app.use(`/${directory}`, express.static(path.join(root, directory), { dotfiles: 'deny', index: false }));
   app.use('/vendor/leaflet', express.static(path.join(root, 'node_modules/leaflet/dist'), { dotfiles: 'deny', index: false }));
   // Generación del comprobante PDF en el navegador (la CSP solo admite scripts propios).

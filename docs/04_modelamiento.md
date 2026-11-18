@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # 4. Modelamiento preliminar de REAlimenta
 
 > Modelo conceptual histórico del prototipo. El esquema implementado de los dos módulos está en db/migrations/001_initial.sql y sus reglas vigentes en Modulos_Funcionales_REAlimenta.md.

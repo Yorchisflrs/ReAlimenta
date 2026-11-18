@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # Configuración MySQL de REAlimenta (XAMPP)
 
 REAlimenta conserva su backend Node.js + Express y usa la base **existente** `realimenta` de MySQL/MariaDB de XAMPP (13 tablas creadas en phpMyAdmin). La aplicación **no crea, altera ni elimina** tablas: al iniciar solo consulta `INFORMATION_SCHEMA` para comprobar que existan las tablas y columnas que utiliza.

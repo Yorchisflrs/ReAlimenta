@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # 2. Modelo de desarrollo propuesto
 
 > Documento histórico de planificación del prototipo. Para los incrementos implementados y pruebas del MVP, consulte PROGRESO_REAlimenta_2.md y Modulos_Funcionales_REAlimenta.md.

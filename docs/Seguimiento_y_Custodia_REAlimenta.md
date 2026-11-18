@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # Seguimiento y cadena de custodia de REAlimenta
 
 Actualización funcional del 21 de octubre de 2026, preparada para la demostración académica en Puno. Amplía la versión documentada inicialmente con trazabilidad operativa registrada, recepción e incidencias. No constituye un sistema certificado de seguridad alimentaria.

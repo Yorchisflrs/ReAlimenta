@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # Fotografías y recuperación demostrativa
 
 Actualización del 21 de octubre de 2026. El proyecto mantiene la aplicación local existente; no se publicó en internet.

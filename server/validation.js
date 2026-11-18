@@ -1,6 +1,7 @@
 import { fail } from './errors.js';
 import { composeAddress, FOOD_PROFILES } from './mappers.js';
-import { PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO, DNI, RUC, TIPOS_ORGANIZACION, TIPOS_ALIMENTO } from './puno.js';
+import { PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO, DNI, RUC } from './puno.js';
+import { activeValues } from './catalogs.js';
 
 export function text(value, field, min = 1, max = 300) {
   if (typeof value !== 'string' || value.trim().length < min || value.trim().length > max)
@@ -111,7 +112,8 @@ export function profileInput(body, role) {
 
 // Registro público: además de la ubicación exige DNI del representante y, según el rol, RUC o tipo y beneficiarios.
 // Con partial (edición del perfil) solo se validan los datos enviados; los demás se conservan.
-export function registrationProfile(body, role, partial = false) {
+// current: el tipo que ya tenía la cuenta, válido aunque el administrador lo haya desactivado.
+export function registrationProfile(body, role, partial = false, current = {}) {
   const data = body.perfil || body;
   const result = profileInput(body, role);
   const given = key => !partial || (data[key] !== undefined && data[key] !== null && data[key] !== '');
@@ -127,7 +129,8 @@ export function registrationProfile(body, role, partial = false) {
     }
   } else {
     if (given('tipo_organizacion')) {
-      if (!TIPOS_ORGANIZACION.includes(data.tipo_organizacion)) fail(422, 'INVALID_ORGANIZATION_TYPE', `Elija el tipo de organización: ${TIPOS_ORGANIZACION.join(', ')}.`);
+      const types = activeValues('tipo_organizacion');
+      if (!types.includes(data.tipo_organizacion) && data.tipo_organizacion !== current.tipo_organizacion) fail(422, 'INVALID_ORGANIZATION_TYPE', `Elija el tipo de organización: ${types.join(', ')}.`);
       result.tipo_organizacion = data.tipo_organizacion;
     }
     if (given('numero_beneficiarios')) {
@@ -139,8 +142,9 @@ export function registrationProfile(body, role, partial = false) {
   return result;
 }
 
-function foodTypeInput(value) {
-  if (!TIPOS_ALIMENTO.includes(value)) fail(422, 'INVALID_FOOD_TYPE', `Elija el tipo de alimento: ${TIPOS_ALIMENTO.join(', ')}.`);
+function foodTypeInput(value, current) {
+  const types = activeValues('tipo_alimento');
+  if (!types.includes(value) && value !== current) fail(422, 'INVALID_FOOD_TYPE', `Elija el tipo de alimento: ${types.join(', ')}.`);
   return value;
 }
 
@@ -153,13 +157,14 @@ function quantity(value) {
 }
 
 // Valida con los nombres del formulario; los límites corresponden a las columnas de donaciones.
-export function donationInput(body) {
+// currentCategory: al editar, el tipo guardado sigue siendo válido aunque ya no se ofrezca.
+export function donationInput(body, currentCategory) {
   const foodProfile = body.perfil_alimento || 'general';
   if (!FOOD_PROFILES.includes(foodProfile)) fail(422, 'FOOD_PROFILE_INVALID', 'Seleccione un tipo de alimento válido.');
   const value = {
     perfil_alimento: foodProfile,
     alimento: words(body.alimento, 'alimento', 2, 200),
-    categoria: foodTypeInput(body.categoria),
+    categoria: foodTypeInput(body.categoria, currentCategory),
     cantidad: quantity(body.cantidad),
     unidad: text(body.unidad, 'unidad', 1, 50),
     descripcion: optionalWords(body.descripcion, 'descripción'),

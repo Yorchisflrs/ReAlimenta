@@ -16,3 +16,6 @@ uploads/donaciones/*
 
 # Fotos de perfil (fachada o logo) de donantes y beneficiarias.
 uploads/locales/*
+
+# Documentación de respaldo del expediente de verificación (datos personales: no se suben a Git).
+uploads/verificaciones/*

@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # 3. Arquitectura propuesta para una implementación futura
 
 > Documento histórico anterior al backend. La arquitectura actual usa Express y PostgreSQL real; consulte README.md y API_REAlimenta.md para la implementación vigente.

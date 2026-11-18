@@ -1,6 +1,6 @@
 import { db, pool, transaction, audit } from '../server/db.js';
 import { userFromRow } from '../server/auth.js';
-import { createTracking, evaluateTracking, getTracking } from '../server/custody.js';
+import { createTracking } from '../server/custody.js';
 import { COLD_CHAIN_MESSAGE } from '../server/mappers.js';
 
 // Un nuevo escenario vigente, sin cambiar fechas ni hitos de lotes anteriores.
@@ -19,7 +19,7 @@ try {
         VALUES (?, 'Salsa de tomate · coordinación inmediata', 'Alimentos preparados', 12, 'porciones', ?, 'preparado', NOW() - INTERVAL 1 MINUTE, NOW() + INTERVAL 30 MINUTE,
         NOW() + INTERVAL 70 MINUTE, 'Av. Sesquicentenario · sector universitario UNA, Puno (punto de demostración)', -15.8268629, -70.0141356, 'Refrigerado', TRUE,
         'Contenedor con tapa de demostración', ?, 'en_proceso')`, [donor.perfil.id_donante,
-        '[DEMO:VIGENTE:SALSA] Escenario académico ficticio con plazo de 70 minutos para comprobar el cálculo; no representa un lote físico ni una recomendación sanitaria.',
+        '[DEMO:VIGENTE:SALSA] Escenario académico ficticio con plazo de 70 minutos; no representa un lote físico ni una recomendación sanitaria.',
         'Conservación refrigerada declarada para la demostración; debe verificarse en operaciones reales. Plazo específico del escenario, no vida útil universal del alimento.']);
       const s = await client.query(`INSERT INTO solicitudes (id_donacion, id_organizacion, cantidad_solicitada, responsable_recojo, telefono_recojo, fecha_recojo_propuesta,
         tipo_transporte, recipiente, mensaje, observaciones, estado) VALUES (?, ?, 12, 'Responsable logístico de demostración', '000000000', NOW() + INTERVAL 5 MINUTE,
@@ -30,9 +30,7 @@ try {
       await audit(client, donor.id_usuario, 'donaciones', d.insertId, 'semilla_vigente', { escenario_ficticio: true, plazo_min: 70, operaciones_previas_modificadas: false });
       return { id_donacion: d.insertId, id_seguimiento: t.id_entrega };
     });
-    const tracking = await getTracking(org, created.id_seguimiento);
-    const evaluated = await evaluateTracking(tracking, org, { preparacion_min: 10, recojo_min: 10, entrega_min: 5, margen_seguridad_min: 15 });
-    console.log(JSON.stringify({ ...created, semaforo: evaluated.evaluacion.estado_viabilidad, distancia_km: evaluated.ruta.distancia_km, minutos_base: evaluated.ruta.duracion_estimada_min, margen_min: evaluated.evaluacion.margen_tiempo_min }));
+    console.log(JSON.stringify(created));
   }
 } catch (error) { console.error('No se pudo preparar el escenario vigente:', error.code || '', error.message); process.exitCode = 1; }
 finally { await pool.end(); }

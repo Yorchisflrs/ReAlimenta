@@ -81,5 +81,31 @@
     if (district) district.innerHTML = districtOptions(event.target.value, '');
   });
 
-  window.REARules = { check, problem, provinceOptions, districtOptions, allDistrictOptions };
+  // Botón de ojo junto a cada campo de contraseña para mostrarla u ocultarla.
+  function revealPasswords(root = document) {
+    root.querySelectorAll?.('input[type="password"]:not([data-reveal])').forEach(input => {
+      input.dataset.reveal = 'true';
+      // El inicio de sesión ya trae su propio botón.
+      if (input.closest('.password-field')) return;
+      const wrap = document.createElement('span'); wrap.className = 'password-field';
+      input.before(wrap); wrap.append(input);
+      const toggle = document.createElement('button');
+      toggle.type = 'button'; toggle.className = 'password-toggle';
+      toggle.setAttribute('aria-label', 'Mostrar contraseña'); toggle.setAttribute('aria-pressed', 'false');
+      toggle.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i>';
+      toggle.addEventListener('click', () => {
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        toggle.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        toggle.setAttribute('aria-pressed', String(show));
+        toggle.innerHTML = `<i class="fa-regular ${show ? 'fa-eye-slash' : 'fa-eye'}" aria-hidden="true"></i>`;
+        input.focus();
+      });
+      wrap.append(toggle);
+    });
+  }
+  const start = () => { revealPasswords(); new MutationObserver(() => revealPasswords()).observe(document.body, { childList: true, subtree: true }); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+
+  window.REARules = { check, problem, provinceOptions, districtOptions, allDistrictOptions, revealPasswords };
 })();

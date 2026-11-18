@@ -68,12 +68,6 @@
       return {data:canvas.toDataURL('image/jpeg',.82),ratio:canvas.width/canvas.height};
     }catch{return null;}
   }
-  // Huella del contenido registrado: permite comprobar que el comprobante no fue alterado.
-  async function fingerprint(values){
-    if(!window.crypto?.subtle)return '';
-    const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(values))));
-    return [...hash.slice(0,8)].map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase().match(/.{4}/g).join('-');
-  }
 
   // Piezas comunes de los dos comprobantes.
   const W=210,M=15,green=[11,113,86],soft=[238,244,232],ink=[40,62,52],muted=[110,128,100];
@@ -153,9 +147,11 @@
     if(foot>277){doc.addPage();foot=20;}
     doc.setDrawColor(200,215,190);doc.line(M,foot,W-M,foot);
     doc.setTextColor(...ink);doc.setFont('helvetica','bold');doc.setFontSize(9);
+    // El código lo calcula el servidor (tipo, número y fecha del registro): se puede consultar en REAlimenta.
     if(code)doc.t(`Código de verificación: ${code}`,M,foot+6);
     doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...muted);
-    notes.forEach((note,i)=>doc.t(note,M,foot+11+i*4));
+    const all=code?['Para consultarlo, entra a REAlimenta y abre "Consultar código".',...notes]:notes;
+    all.forEach((note,i)=>doc.t(note,M,foot+11+i*4));
   }
 
   async function download(d,user={},profile={},localPhotos=[]){
@@ -164,7 +160,7 @@
     y=tiles(doc,y,[[qty(d.cantidad),show('unidad',d.unidad)],[d.alimento,'Qué alimento es'],[d.categoria,'Tipo de alimento']]);
     y=await photos(doc,y,[0,1,2].map(i=>localPhotos[i]?.url||d.fotos?.[i]?.url));
     y=sections(doc,y,donationRows(d,user,profile).map(([title,,rows])=>[title,rows]));
-    const code=await fingerprint([d.id_donacion,d.alimento,d.cantidad,d.unidad,d.fecha_creacion,d.fecha_limite_recojo,d.direccion_recojo,(d.fotos||[]).map(f=>f.nombre_archivo||f.url)]);
+    const code=d.codigo_verificacion||'';
     footer(doc,y,code,[`Documento generado el ${when(new Date())} desde REAlimenta. Conserva este archivo como evidencia del registro.`,'La información y las fotos fueron declaradas por el donante. La plataforma no certifica la calidad del alimento.']);
     doc.save(`comprobante-donacion-${d.id_donacion}.pdf`);
   }
@@ -182,7 +178,7 @@
       ['Lugar de recojo',[['Dirección',d.direccion_recojo||'-'],['Distrito',d.distrito||'-'],['Se puede recoger',`${when(d.fecha_disponibilidad)} a ${when(d.fecha_limite_recojo)}`],['Cómo se guarda',`${show('conservacion',d.conservacion_declarada)}${d.requiere_cadena_frio?' · debe ir frío':''}`]]],
       ['Mensaje para el donante',[['Mensaje',r.observaciones||'-']]]
     ]);
-    const code=await fingerprint([r.id_solicitud,r.id_donacion,r.id_organizacion,r.responsable_recojo,r.telefono,r.fecha_propuesta,r.fecha_creacion]);
+    const code=r.codigo_verificacion||'';
     footer(doc,y,code,[`Documento generado el ${when(new Date())} desde REAlimenta. Conserva este archivo como evidencia de tu solicitud.`,'La solicitud no reserva la donación: queda confirmada solo cuando el donante la acepta.']);
     doc.save(`comprobante-solicitud-${r.id_solicitud}.pdf`);
   }

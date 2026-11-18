@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # API REST de REAlimenta 2.0
 
 La ampliación de seguimiento, hitos de custodia, recepción e incidencias se documenta en [Seguimiento y custodia](Seguimiento_y_Custodia_REAlimenta.md). Conserva autenticación, CSRF y permisos por participante.

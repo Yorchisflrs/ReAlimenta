@@ -89,6 +89,25 @@ UNLOCK TABLES;
 -- Table structure for table `donacion_fotos`
 --
 
+DROP TABLE IF EXISTS `catalogos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `catalogos` (
+  `id_catalogo` int(11) NOT NULL AUTO_INCREMENT,
+  `tipo` varchar(50) NOT NULL,
+  `valor` varchar(150) NOT NULL,
+  `activo` tinyint(1) NOT NULL DEFAULT 1,
+  `orden` int(11) NOT NULL DEFAULT 0,
+  `fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id_catalogo`),
+  UNIQUE KEY `catalogo_unico` (`tipo`,`valor`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `catalogos` WRITE;
+INSERT INTO `catalogos` (`tipo`, `valor`, `orden`) VALUES ('tipo_organizacion','Olla Común',1),('tipo_organizacion','Comedor Popular',2),('tipo_organizacion','Vaso de Leche',3),('tipo_alimento','Abarrotes y alimentos secos',1),('tipo_alimento','Conservas y enlatados',2),('tipo_alimento','Verduras, tubérculos y frutas',3),('tipo_alimento','Carnes, pescados y huevos',4),('tipo_alimento','Lácteos y derivados',5),('tipo_alimento','Panadería y complementos',6),('tipo_alimento','Alimentos preparados',7);
+UNLOCK TABLES;
+
 DROP TABLE IF EXISTS `donacion_fotos`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -191,10 +210,11 @@ CREATE TABLE `donantes` (
   `distrito` varchar(100) DEFAULT NULL,
   `latitud` decimal(10,7) DEFAULT NULL,
   `longitud` decimal(10,7) DEFAULT NULL,
-  `estado_verificacion` enum('pendiente','verificado','rechazado') DEFAULT 'pendiente',
+  `estado_verificacion` enum('pendiente','en_revision','verificado','rechazado') DEFAULT 'pendiente',
   `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp(),
   `dni_representante` char(8) DEFAULT NULL,
   `foto_local` varchar(255) DEFAULT NULL,
+  `subsanacion_habilitada` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id_donante`),
   UNIQUE KEY `id_usuario` (`id_usuario`),
   CONSTRAINT `donantes_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
@@ -207,7 +227,7 @@ CREATE TABLE `donantes` (
 
 LOCK TABLES `donantes` WRITE;
 /*!40000 ALTER TABLE `donantes` DISABLE KEYS */;
-INSERT INTO `donantes` VALUES (1,1,'Panadería San Carlos · DEMO',NULL,NULL,'Donante de demostración','Punto público demostrativo: Catedral Basílica San Carlos Borromeo, Jirón Deustua, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8409080,-70.0289580,'verificado','2026-10-28 13:42:26',NULL,NULL);
+INSERT INTO `donantes` VALUES (1,1,'Panadería San Carlos · DEMO',NULL,NULL,'Donante de demostración','Punto público demostrativo: Catedral Basílica San Carlos Borromeo, Jirón Deustua, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8409080,-70.0289580,'verificado','2026-10-28 13:42:26',NULL,NULL,0);
 /*!40000 ALTER TABLE `donantes` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -387,10 +407,12 @@ CREATE TABLE `organizaciones` (
   `distrito` varchar(100) DEFAULT NULL,
   `latitud` decimal(10,7) DEFAULT NULL,
   `longitud` decimal(10,7) DEFAULT NULL,
-  `estado_verificacion` enum('pendiente','verificado','rechazado') DEFAULT 'pendiente',
+  `estado_verificacion` enum('pendiente','en_revision','verificado','rechazado') DEFAULT 'pendiente',
   `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp(),
   `dni_representante` char(8) DEFAULT NULL,
   `foto_local` varchar(255) DEFAULT NULL,
+  `codigo_registro` varchar(50) DEFAULT NULL,
+  `subsanacion_habilitada` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id_organizacion`),
   UNIQUE KEY `id_usuario` (`id_usuario`),
   CONSTRAINT `organizaciones_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
@@ -403,7 +425,7 @@ CREATE TABLE `organizaciones` (
 
 LOCK TABLES `organizaciones` WRITE;
 /*!40000 ALTER TABLE `organizaciones` DISABLE KEYS */;
-INSERT INTO `organizaciones` VALUES (1,2,'Comedor Esperanza · DEMO',NULL,'Responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26',NULL,NULL),(2,3,'Red Solidaria · DEMO',NULL,'Segundo responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno (segunda cuenta de prueba) · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26',NULL,NULL);
+INSERT INTO `organizaciones` VALUES (1,2,'Comedor Esperanza · DEMO',NULL,'Responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26',NULL,NULL,NULL,0),(2,3,'Red Solidaria · DEMO',NULL,'Segundo responsable de demostración',0,'Punto público demostrativo: Parque Pino, Puno (segunda cuenta de prueba) · Ref.: Ubicación demostrativa de punto público, no establecimiento real.','Puno','Puno','Puno',-15.8377634,-70.0280229,'verificado','2026-10-28 13:42:26',NULL,NULL,NULL,0);
 /*!40000 ALTER TABLE `organizaciones` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -515,6 +537,48 @@ UNLOCK TABLES;
 --
 -- Dumping routines for database 'realimenta'
 --
+DROP TABLE IF EXISTS `verificacion_documentos`;
+DROP TABLE IF EXISTS `verificaciones`;
+CREATE TABLE `verificaciones` (
+  `id_verificacion` int(11) NOT NULL AUTO_INCREMENT,
+  `id_usuario` int(11) NOT NULL,
+  `id_administrador` int(11) DEFAULT NULL,
+  `tipo_verificacion` varchar(300) DEFAULT NULL,
+  `resultado` varchar(30) NOT NULL,
+  `estado_anterior` varchar(30) DEFAULT NULL,
+  `codigo_registro` varchar(50) DEFAULT NULL,
+  `ruc` varchar(20) DEFAULT NULL,
+  `observaciones` text DEFAULT NULL,
+  `motivo` text DEFAULT NULL,
+  `subsanable` tinyint(1) NOT NULL DEFAULT 0,
+  `fecha` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id_verificacion`),
+  KEY `id_usuario` (`id_usuario`),
+  KEY `id_administrador` (`id_administrador`),
+  CONSTRAINT `verificaciones_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`),
+  CONSTRAINT `verificaciones_ibfk_2` FOREIGN KEY (`id_administrador`) REFERENCES `usuarios` (`id_usuario`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `verificacion_documentos` (
+  `id_documento` int(11) NOT NULL AUTO_INCREMENT,
+  `id_usuario` int(11) NOT NULL,
+  `id_verificacion` int(11) DEFAULT NULL,
+  `id_subido_por` int(11) DEFAULT NULL,
+  `origen` varchar(20) NOT NULL DEFAULT 'administrador',
+  `nombre_original` varchar(255) NOT NULL,
+  `nombre_archivo` varchar(100) NOT NULL,
+  `tipo_mime` varchar(100) NOT NULL,
+  `tamano_bytes` int(11) NOT NULL,
+  `fecha` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id_documento`),
+  UNIQUE KEY `nombre_archivo` (`nombre_archivo`),
+  KEY `id_usuario` (`id_usuario`),
+  KEY `id_verificacion` (`id_verificacion`),
+  CONSTRAINT `verificacion_documentos_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`),
+  CONSTRAINT `verificacion_documentos_ibfk_2` FOREIGN KEY (`id_verificacion`) REFERENCES `verificaciones` (`id_verificacion`) ON DELETE SET NULL,
+  CONSTRAINT `verificacion_documentos_ibfk_3` FOREIGN KEY (`id_subido_por`) REFERENCES `usuarios` (`id_usuario`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

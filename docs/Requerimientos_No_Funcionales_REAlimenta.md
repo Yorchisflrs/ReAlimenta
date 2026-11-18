@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # REQUERIMIENTOS NO FUNCIONALES DEL SISTEMA REAlimenta
 
 Curso Taller de Desarrollo de Software  

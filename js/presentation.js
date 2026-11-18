@@ -1,4 +1,4 @@
-/* Fotografías locales y planes reales; nunca se fabrican distancias ni plazos sanitarios. */
+/* Fotografías de las donaciones y etiquetas de las tarjetas; nunca se fabrican plazos sanitarios. */
 (() => {
   const keys=['pan','fruta','verduras','yogur','arroz','sopa','salsa','galletas','leche','ensalada'];
   const profiles={general:'Condiciones específicas del lote',panaderia:'Panadería',frutas:'Fruta entera',hortalizas:'Hortalizas',preparado:'Alimento preparado',refrigerado:'Producto refrigerado',seco:'Producto seco envasado'};
@@ -31,9 +31,9 @@
       const body=card.querySelector('.donation-card-body');
       if(d.cadena_custodia){
         const status=card.querySelector('.card-title-row .mvp-badge');
-        const titles={preparacion:'En preparación',listo:'Listo para recojo',recogido:'Recojo registrado',en_transito:'En traslado',entregado:'Entrega registrada',confirmado:'Recepción confirmada'};
+        const titles={preparacion:'Recojo acordado',listo:'Listo para recoger',recogido:'Recogido',confirmado:'Recibido',con_problemas:'Recibido con problemas'};
         if(status&&d.estado==='en_proceso')status.innerHTML=`<span></span>${titles[d.cadena_custodia.estado]||'Asignada'}`;
-        const go=document.createElement('button');go.type='button';go.className='btn btn-secondary card-tracking-link';go.dataset.presentationTracking=d.cadena_custodia.id_seguimiento;go.innerHTML='<i class="fa-solid fa-truck-fast"></i> Abrir seguimiento';body.append(go);
+        const go=document.createElement('button');go.type='button';go.className='btn btn-secondary card-tracking-link';go.dataset.presentationTracking=d.cadena_custodia.id_seguimiento;go.innerHTML='<i class="fa-solid fa-truck-fast"></i> Ver recojo';body.append(go);
       }
       const address=document.createElement('p');address.className='card-address';address.innerHTML=`<i class="fa-solid fa-location-dot" aria-hidden="true"></i><span>${esc(d.direccion_recojo)}</span>`;
       body.querySelector('.donation-by').after(address);
@@ -43,19 +43,8 @@
       const id=card.querySelector('[data-action="request-detail"]')?.dataset.id;
       const request=state.requests.find(r=>String(r.id_solicitud)===id);
       if(!request?.id_seguimiento||card.querySelector('[data-presentation-tracking]'))return;
-      const link=document.createElement('button');link.type='button';link.className='btn btn-primary';link.dataset.presentationTracking=request.id_seguimiento;link.innerHTML='<i class="fa-solid fa-route"></i> Abrir seguimiento y custodia';card.querySelector('.request-card-actions').append(link);
+      const link=document.createElement('button');link.type='button';link.className='btn btn-primary';link.dataset.presentationTracking=request.id_seguimiento;link.innerHTML='<i class="fa-solid fa-route"></i> Ver recojo y contacto';card.querySelector('.request-card-actions').append(link);
     });
-  }
-  function comparison(result){
-    if(!result?.ruta)return '';
-    const base=Number(result.ruta.duracion_estimada_min),extra=Number(result.evaluacion?.demora_trafico_min||0);
-    return `<div class="traffic-comparison"><div><span><i class="fa-solid fa-road"></i> Ruta base</span><strong>${num(base)} <small>min</small></strong><p>Estimación del proveedor</p></div><div><span><i class="fa-solid fa-car-side"></i> Con demora elegida</span><strong>${num(base+extra)} <small>min</small></strong><p>Base + ${num(extra)} min de escenario</p></div><div><span><i class="fa-solid fa-shield-heart"></i> Margen logístico</span><strong>${num(result.evaluacion?.margen_seguridad_min)} <small>min</small></strong><p>Reserva adicional de planificación</p></div></div><p class="traffic-disclaimer">Los escenarios de congestión son supuestos manuales, no mediciones de tráfico en vivo. La duración real puede variar.</p>`;
-  }
-  function journey(result,places={}){
-    if(!result?.ruta)return '';
-    const pickup=result.ruta_recojo,origin=places.origen||result.origen||result.ruta.origen,destination=places.destino||result.destino||result.ruta.destino;
-    const from=origin?.nombre||origin?.direccion||'Establecimiento donante',to=destination?.nombre||destination?.direccion||'Beneficiaria';
-    return `<div class="journey-legs"><article class="journey-leg ${!pickup?'completed':''}" data-journey-leg="recojo"><span><i class="fa-solid fa-car-side"></i> 1 · Ir al punto de recojo</span><strong>${pickup?`${num(pickup.distancia_km)} km · ${num(pickup.duracion_estimada_min)} min`:'Recojo ya registrado'}</strong><p>${esc(to)} → ${esc(from)}</p><small>${pickup?'Ida por carretera; se incluye en el tiempo total antes del recojo.':'El viaje de ida ya no se vuelve a sumar.'}</small></article><article class="journey-leg" data-journey-leg="entrega"><span><i class="fa-solid fa-box"></i> 2 · Trasladar los alimentos</span><strong>${num(result.ruta.distancia_km)} km · ${num(result.ruta.duracion_estimada_min)} min</strong><p>${esc(from)} → ${esc(to)}</p><small>Ruta base mostrada en el mapa. La demora elegida se suma a este traslado.</small></article></div>`;
   }
   // Detalle: foto principal y galería por ángulo.
   function routeForm(root,state){
@@ -83,6 +72,6 @@
     const profile=document.createElement('input');profile.type='hidden';profile.name='perfil_alimento';profile.value=d?.perfil_alimento||byCategory[form.categoria.value]||'general';form.append(profile);
     form.categoria.addEventListener('change',()=>{profile.value=byCategory[form.categoria.value]||'general';});
   }
-  window.REAPresentation={configure(value){ctx=value;},photo,profiles,comparison,journey,decorate,enhance(root,state){decorate(root,state);donationForm(root,state);routeForm(root,state);}};
+  window.REAPresentation={configure(value){ctx=value;},photo,profiles,decorate,enhance(root,state){decorate(root,state);donationForm(root,state);routeForm(root,state);}};
   document.addEventListener('click',event=>{const button=event.target.closest('[data-presentation-tracking]');if(button)REACustody.open(Number(button.dataset.presentationTracking));});
 })();
