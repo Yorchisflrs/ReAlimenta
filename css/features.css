@@ -216,3 +216,24 @@
 @media(max-width:900px) { .file-layout { grid-template-columns:1fr; } .lookup-form { grid-template-columns:1fr; } }
 .mvp-badge.status-rechazado { background:#fcf0e9; border-color:#f0ddd2; color:#98664e; }
 .mvp-badge.status-verificado { background:#edf5e6; border-color:#d7e8c8; color:#5f8a47; }
+/* Evaluación clara del recorrido y sus supuestos. */
+.route-options { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:18px 0 8px; }
+.route-options label { min-width:200px; flex:1; display:grid; gap:6px; font-weight:600; }
+.route-result { margin:16px 0; padding:18px; border:1px solid #d4ded0; border-radius:16px; background:#f6f8f4; }
+.route-result.verde { background:#eef8ed; border-color:#aed3ad; }
+.route-result.amarillo { background:#fff8e5; border-color:#e9d190; }
+.route-result.rojo { background:#fff0ee; border-color:#ebb7ad; }
+.route-result-heading { display:flex; align-items:start; gap:12px; }
+.route-result-heading p { margin:4px 0 12px; }
+.route-light { flex:none; width:16px; height:16px; margin-top:4px; border-radius:50%; background:#8b9789; }
+.verde .route-light { background:#338657; }.amarillo .route-light { background:#cd9213; }.rojo .route-light { background:#c64332; }
+.route-facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px; }
+.route-facts div { display:grid; gap:4px; background:#fff; padding:12px; border-radius:10px; }
+.route-facts span { font-size:.86rem; }.route-facts strong { font-size:1.05rem; }
+.mvp-badge.status-borrador { background:#fff5da; color:#775400; border:1px solid #efd795; }
+.pickup-shortcuts { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.pickup-shortcuts .field-hint { flex-basis:100%; }
+.rp-offer-card { display:grid; grid-template-columns:minmax(140px, 36%) 1fr; overflow:hidden; border:1px solid #dce7d8; border-radius:16px; margin:12px 0 18px; background:#fff; }
+.rp-offer-card > img { width:100%; height:100%; min-height:180px; object-fit:cover; }
+.rp-offer-card > div { padding:18px; }.rp-offer-card h3 { margin:10px 0 4px; }.rp-offer-card p { margin:7px 0; }
+@media(max-width:480px) { .rp-offer-card { grid-template-columns:1fr; }.rp-offer-card > img { max-height:180px; } }

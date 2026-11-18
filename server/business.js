@@ -15,12 +15,12 @@ import {
 
 const ELIGIBLE_USER = "u.estado IN ('activo','pendiente')";
 // Catálogo de beneficiarias: nunca muestra donaciones canceladas, finalizadas, expiradas ni fuera de plazo.
-const CATALOG = `d.estado = 'disponible' AND d.fecha_limite_recojo > NOW()
-  AND (d.fecha_limite_aprovechamiento IS NULL OR d.fecha_limite_aprovechamiento > NOW())
+const CATALOG = `d.estado = 'disponible' AND d.borrador = 0 AND d.fecha_limite_recojo > NOW()
+  AND (d.fecha_limite_aprovechamiento IS NULL OR d.fecha_limite_aprovechamiento > NOW()) AND (d.fecha_vencimiento IS NULL OR d.fecha_vencimiento > NOW())
   AND dt.estado_verificacion = 'verificado' AND ${ELIGIBLE_USER}`;
 const DONATION_STATES = { vencida: 'expirada' };
 
-const EXPIRED = `estado = 'disponible' AND (fecha_limite_recojo <= NOW() OR fecha_limite_aprovechamiento <= NOW())`;
+const EXPIRED = `estado = 'disponible' AND borrador = 0 AND (fecha_limite_recojo <= NOW() OR fecha_limite_aprovechamiento <= NOW() OR fecha_vencimiento <= NOW())`;
 export async function expireDonations() {
   if (!(await db.query(`SELECT id_donacion FROM donaciones WHERE ${EXPIRED} LIMIT 1`)).rowCount) return 0;
   return transaction(async client => {
@@ -114,9 +114,12 @@ async function lockedDonation(client, donationId) {
   if (!row) fail(404, 'DONATION_NOT_FOUND', 'No se encontró la donación.');
   return row;
 }
-function checkAvailable(donation) {
+function checkAvailable(donation, { allowDraft = false } = {}) {
+  if (donation.borrador && !allowDraft) fail(409, 'DONATION_DRAFT', 'La donación todavía es un borrador y no admite solicitudes.');
+  if (donation.borrador && allowDraft && donation.estado === 'disponible') return;
   if (donation.estado !== 'disponible' || Date.parse(donation.fecha_limite_recojo) <= Date.now() ||
-      (donation.fecha_limite_aprovechamiento && Date.parse(donation.fecha_limite_aprovechamiento) <= Date.now()))
+      (donation.fecha_limite_aprovechamiento && Date.parse(donation.fecha_limite_aprovechamiento) <= Date.now()) ||
+      (donation.fecha_vencimiento && Date.parse(donation.fecha_vencimiento) <= Date.now()))
     fail(409, 'DONATION_UNAVAILABLE', 'La donación ya no está disponible para nuevas solicitudes o decisiones.');
 }
 
@@ -130,7 +133,7 @@ businessRouter.get('/donaciones', async (req, res) => {
   else if (req.user.rol === 'organizacion') conditions.push(CATALOG);
   if (req.query.q) add("CONCAT_WS(' ', d.nombre_alimento, d.descripcion, dt.nombre_establecimiento) LIKE ?", likePattern(String(req.query.q).slice(0, 150)));
   if (req.query.categoria) { const names = storedFoodTypes(String(req.query.categoria).slice(0, 100)); add(`d.categoria IN (${placeholders(names)})`, ...names); }
-  if (req.query.distrito) add('dt.distrito = ?', String(req.query.distrito).slice(0, 100));
+  if (req.query.distrito) add('COALESCE(d.distrito_recojo, dt.distrito) = ?', String(req.query.distrito).slice(0, 100));
   if (req.query.estado) { const estado = String(req.query.estado); add('d.estado = ?', DONATION_STATES[estado] || estado); }
   const where = `${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY d.fecha_creacion DESC, d.id_donacion DESC LIMIT 200`;
   res.json({ data: await loadDonations(where, params, req.user) });
@@ -141,8 +144,9 @@ businessRouter.get('/donaciones/:id', async (req, res) => {
   const [row] = await loadDonations('WHERE d.id_donacion = ?', [id(req.params.id)], req.user);
   if (!row) fail(404, 'DONATION_NOT_FOUND', 'No se encontró la donación.');
   if (req.user.rol === 'donante' && row.id_donante !== req.user.perfil?.id_donante) fail(403, 'NOT_OWNER', 'No tiene permiso para consultar esta donación.');
+  if (req.user.rol === 'organizacion' && row.borrador) fail(403, 'FORBIDDEN', 'La donación no está disponible en el catálogo.');
   const orgId = req.user.perfil?.id_organizacion || -1;
-  if (req.user.rol === 'organizacion' && (row.estado !== 'disponible' || row.donante_estado_verificacion !== 'verificado' || !canSignIn(row.donante_estado))) {
+  if (req.user.rol === 'organizacion' && (row.borrador || row.estado !== 'disponible' || row.donante_estado_verificacion !== 'verificado' || !canSignIn(row.donante_estado))) {
     const own = await db.query('SELECT 1 FROM solicitudes WHERE id_donacion = ? AND id_organizacion = ?', [row.id_donacion, orgId]);
     if (!own.rowCount) fail(403, 'FORBIDDEN', 'La donación no está disponible en el catálogo.');
   }
@@ -160,14 +164,16 @@ businessRouter.post('/donaciones', requireRole('donante'), async (req, res) => {
   requireVerified(req);
   // El donante declara, bajo su responsabilidad, que el alimento está en buen estado para el consumo.
   if (req.body.declaracion_buen_estado !== true) fail(422, 'DECLARATION_REQUIRED', 'Para publicar, confirma que el alimento está en buen estado y que la información es correcta.');
+  if (req.body.borrador_fotos !== undefined && typeof req.body.borrador_fotos !== 'boolean') fail(422, 'VALIDATION_ERROR', 'El estado de borrador debe ser verdadero o falso.');
+  const draft = req.body.borrador_fotos === true;
   const value = donationInput(req.body);
-  const columns = Object.entries(toDonationColumns(value, req.user.perfil));
+  const columns = Object.entries({ ...toDonationColumns(value, req.user.perfil), borrador: draft });
   const donationId = await transaction(async client => {
     const created = await client.query(`INSERT INTO donaciones (id_donante, ${columns.map(([key]) => key).join(', ')})
       VALUES (?, ${columns.map(() => '?').join(', ')})`, [req.user.perfil.id_donante, ...columns.map(([, v]) => v)]);
-    await client.query("INSERT INTO seguimientos (id_donacion, id_usuario, etapa, responsable, observaciones) VALUES (?, ?, 'publicada', ?, ?)",
+    if (!draft) await client.query("INSERT INTO seguimientos (id_donacion, id_usuario, etapa, responsable, observaciones) VALUES (?, ?, 'publicada', ?, ?)",
       [created.insertId, req.user.id_usuario, req.user.perfil.nombre_establecimiento.slice(0, 150), 'Donación publicada por el donante.']);
-    await audit(client, req.user.id_usuario, 'donaciones', created.insertId, 'crear', { alimento: value.alimento, declaracion_buen_estado: true });
+    await audit(client, req.user.id_usuario, 'donaciones', created.insertId, draft ? 'guardar_borrador' : 'crear', { alimento: value.alimento, declaracion_buen_estado: true });
     return created.insertId;
   });
   const [row] = await loadDonations('WHERE d.id_donacion = ?', [donationId], req.user);
@@ -179,7 +185,7 @@ businessRouter.patch('/donaciones/:id', requireRole('donante'), async (req, res)
   const donationId = await transaction(async client => {
     const existing = await lockedDonation(client, id(req.params.id));
     donationOwner(req, existing);
-    checkAvailable(existing);
+    checkAvailable(existing, { allowDraft: true });
     if ((await client.query(`SELECT 1 FROM solicitudes WHERE id_donacion = ? AND estado IN (${placeholders(ACTIVE_REQUEST_STATES)}) LIMIT 1`, [existing.id_donacion, ...ACTIVE_REQUEST_STATES])).rowCount)
       fail(409, 'DONATION_HAS_REQUESTS', 'No se puede editar una donación con solicitudes activas. Cancele la publicación con un motivo si las condiciones cambiaron.');
     const value = donationInput({ ...donationFromRow(existing, req.user.perfil), ...req.body }, existing.categoria);
@@ -187,6 +193,24 @@ businessRouter.patch('/donaciones/:id', requireRole('donante'), async (req, res)
     await client.query(`UPDATE donaciones SET ${columns.map(([key]) => `${key} = ?`).join(', ')}, fecha_actualizacion = CURRENT_TIMESTAMP
       WHERE id_donacion = ?`, [...columns.map(([, v]) => v), existing.id_donacion]);
     await audit(client, req.user.id_usuario, 'donaciones', existing.id_donacion, 'editar', { campos: Object.keys(req.body) });
+    return existing.id_donacion;
+  });
+  const [row] = await loadDonations('WHERE d.id_donacion = ?', [donationId], req.user);
+  res.json({ data: row });
+});
+// El borrador no aparece en el catálogo hasta que las fotografías obligatorias estén guardadas.
+businessRouter.post('/donaciones/:id/publicar', requireRole('donante'), async (req, res) => {
+  requireVerified(req);
+  const donationId = await transaction(async client => {
+    const existing = await lockedDonation(client, id(req.params.id));
+    donationOwner(req, existing);
+    if (!existing.borrador) { checkAvailable(existing); return existing.id_donacion; } // Reintentar no duplica la publicación.
+    checkAvailable({ ...existing, borrador: false });
+    const total = Number((await client.query('SELECT COUNT(*) AS total FROM donacion_fotos WHERE id_donacion = ?', [existing.id_donacion])).rows[0].total);
+    if (total < 3) fail(409, 'DRAFT_PHOTOS_REQUIRED', `Faltan ${3-total} foto(s). Completa las tres fotos para publicar.`);
+    await client.query('UPDATE donaciones SET borrador = 0, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id_donacion = ?', [existing.id_donacion]);
+    await client.query("INSERT INTO seguimientos (id_donacion, id_usuario, etapa, responsable, observaciones) VALUES (?, ?, 'publicada', ?, 'Donación publicada después de guardar sus fotos.')", [existing.id_donacion, req.user.id_usuario, req.user.perfil.nombre_establecimiento.slice(0, 150)]);
+    await audit(client, req.user.id_usuario, 'donaciones', existing.id_donacion, 'publicar', { fotos: total });
     return existing.id_donacion;
   });
   const [row] = await loadDonations('WHERE d.id_donacion = ?', [donationId], req.user);
@@ -497,10 +521,10 @@ export async function getStats() {
     (SELECT COUNT(*) FROM usuarios) AS usuarios,
     (SELECT COUNT(*) FROM donantes) AS donantes,
     (SELECT COUNT(*) FROM organizaciones) AS organizaciones,
-    (SELECT COUNT(*) FROM donaciones) AS donaciones,
-    (SELECT COUNT(*) FROM donaciones WHERE estado = 'disponible') AS disponibles,
-    (SELECT COUNT(*) FROM donaciones WHERE estado = 'en_proceso') AS en_proceso,
-    (SELECT COUNT(*) FROM donaciones WHERE estado = 'finalizada') AS finalizadas,
+    (SELECT COUNT(*) FROM donaciones WHERE borrador = 0) AS donaciones,
+    (SELECT COUNT(*) FROM donaciones WHERE estado = 'disponible' AND borrador = 0) AS disponibles,
+    (SELECT COUNT(*) FROM donaciones WHERE estado = 'en_proceso' AND borrador = 0) AS en_proceso,
+    (SELECT COUNT(*) FROM donaciones WHERE estado = 'finalizada' AND borrador = 0) AS finalizadas,
     (SELECT COUNT(*) FROM solicitudes) AS solicitudes,
     (SELECT COUNT(*) FROM solicitudes WHERE estado = 'pendiente') AS solicitudes_pendientes,
     (SELECT COUNT(*) FROM usuarios WHERE correo LIKE ?) AS cuentas_demostracion`, [`%${likeEscape(`@${config.demoEmailDomain}`)}`])).rows[0];

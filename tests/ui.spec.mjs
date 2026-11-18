@@ -1,10 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import path from 'node:path';
 
 // Recorridos reales en Chrome. Se ejecutan con `npm run test:ui`, que levanta la aplicación sobre una base
 // temporal: no escriben en la base `realimenta`.
-const outputDirectory = new URL('../docs/evidencias/', import.meta.url);
+const outputDirectory = process.env.UI_EVIDENCE_DIR
+  ? pathToFileURL(`${path.resolve(process.env.UI_EVIDENCE_DIR)}${path.sep}`)
+  : new URL('../docs/evidencias/', import.meta.url);
 const screenshotPath = name => fileURLToPath(new URL(name, outputDirectory));
 const photoFile = fileURLToPath(new URL('../assets/images/alimentos/pan.jpg', import.meta.url));
 const runId = process.env.REALIMENTA_UI_RUN_ID || Date.now().toString(36);
@@ -44,6 +47,7 @@ async function publishDonation(page, suffix) {
   const form = page.locator('#donation-form');
   await form.locator('[name="alimento"]').fill(name);
   await form.locator('[name="categoria"]').selectOption({ label: 'Panadería y complementos' });
+  await form.locator('[name="estado_alimento_declarado"]').selectOption('sin_novedad');
   await form.locator('[name="cantidad"]').fill('12');
   await form.locator('[name="unidad"]').selectOption('unidades');
   await form.locator('[name="envase"]').fill('Bolsa cerrada de demostración');

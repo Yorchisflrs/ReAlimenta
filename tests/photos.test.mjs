@@ -31,8 +31,8 @@ async function donor() {
   await db.query("INSERT INTO donantes (id_usuario, nombre_establecimiento, direccion, distrito, latitud, longitud, estado_verificacion) VALUES (?, 'Establecimiento de prueba aislada', 'Punto público demostrativo de Puno', 'Puno', -15.840908, -70.0289581, 'verificado')", [user.insertId]);
   return login(correo);
 }
-async function donation(account) {
-  const result = await call('POST', '/api/donaciones', { declaracion_buen_estado: true, alimento: 'Alimento para prueba de fotografías', categoria: 'Panadería y complementos', cantidad: 12, unidad: 'unidades', descripcion: 'Registro de una base temporal aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público demostrativo de Puno', distrito: 'Puno', latitud_recojo: -15.840908, longitud_recojo: -70.0289581, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba' }, account);
+async function donation(account, overrides = {}) {
+  const result = await call('POST', '/api/donaciones', { declaracion_buen_estado: true, alimento: 'Alimento para prueba de fotografías', categoria: 'Panadería y complementos', cantidad: 12, unidad: 'unidades', descripcion: 'Registro de una base temporal aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público demostrativo de Puno', distrito: 'Puno', latitud_recojo: -15.840908, longitud_recojo: -70.0289581, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba', ...overrides }, account);
   assert.equal(result.status, 201, JSON.stringify(result.data));
   return result.data.data;
 }
@@ -63,6 +63,36 @@ before(async () => {
   await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
   baseUrl = `http://127.0.0.1:${server.address().port}`;
   for (const name of ['organizacion', 'organizacion2', 'admin']) accounts[name] = await login(`${name}@realimenta.test`);
+});
+
+test('Borrador: no aparece en el catálogo, se puede recuperar y se publica una sola vez tras tres fotos', async () => {
+  const account=await donor(), d=await donation(account,{borrador_fotos:true});
+  assert.equal(d.borrador,true);
+  assert.equal(d.codigo_verificacion,null);
+  const path=`/api/donaciones/${d.id_donacion}`;
+  assert.equal((await call('POST',`${path}/publicar`,{},account)).status,409);
+  assert.equal((await call('GET',path,undefined,accounts.organizacion)).status,403);
+  assert.equal((await call('POST',`${path}/evaluacion-ruta`,{},accounts.organizacion)).status,404);
+  const attempted=await call('POST',`${path}/solicitudes`,{tiempo_llegada_min:25,responsable_recojo:'Responsable de prueba',telefono:'951000000',transporte_declarado:'Mototaxi',recipiente_declarado:'Caja cerrada',dispone_cadena_frio:false,fecha_propuesta:new Date(Date.now()+3600000).toISOString()},accounts.organizacion);
+  assert.equal(attempted.status,409);
+  const catalog=(await call('GET','/api/donaciones',undefined,accounts.organizacion)).data.data;
+  assert.ok(!catalog.some(item=>item.id_donacion===d.id_donacion));
+  // Un borrador con horario vencido no se publica ni se pierde: el dueño puede corregirlo.
+  await db.query('UPDATE donaciones SET fecha_limite_recojo = NOW() - INTERVAL 1 MINUTE WHERE id_donacion = ?',[d.id_donacion]);
+  await call('GET','/api/donaciones',undefined,account);
+  assert.equal((await one('SELECT estado FROM donaciones WHERE id_donacion = ?',[d.id_donacion])).estado,'disponible');
+  assert.equal((await call('PATCH',path,{fecha_limite_recojo:new Date(Date.now()+4*3600000).toISOString()},account)).status,200);
+  const first=await upload(d.id_donacion,account);assert.equal(first.status,201);
+  assert.equal((await media(first.data.data.url,accounts.organizacion)).status,404);
+  const recovered=(await call('GET',path,undefined,account)).data.data;
+  assert.equal(recovered.borrador,true);assert.equal(recovered.fotos.length,1);
+  assert.equal((await upload(d.id_donacion,account)).status,201);assert.equal((await upload(d.id_donacion,account)).status,201);
+  const simultaneous=await Promise.all([call('POST',`${path}/publicar`,{},account),call('POST',`${path}/publicar`,{},account)]);
+  assert.deepEqual(simultaneous.map(r=>r.status),[200,200]);
+  assert.equal((await one("SELECT COUNT(*) AS total FROM seguimientos WHERE id_donacion = ? AND etapa = 'publicada'",[d.id_donacion])).total,1);
+  const published=(await call('GET',path,undefined,accounts.organizacion)).data.data;
+  assert.equal(published.borrador,false);assert.match(published.codigo_verificacion,/^D\d+-/);
+  assert.equal((await media(first.data.data.url,accounts.organizacion)).status,200);
 });
 
 after(async () => {
@@ -156,17 +186,19 @@ test('Fotografías: límite 5 MB y límite 25 megapíxeles con errores comprensi
   assert.equal(result.status, 422); assert.equal(result.data.error.code, 'PHOTO_INVALID');
 });
 
-test('Fotografías: máximo de tres fotos incluso con dos cargas finales simultáneas; primera portada estable', async () => {
+test('Fotografías: máximo de cinco fotos incluso con dos cargas finales simultáneas; primera portada estable', async () => {
   const account = await donor(), d = await donation(account);
   const first = await upload(d.id_donacion, account); assert.equal(first.status, 201);
+  assert.equal((await upload(d.id_donacion, account)).status, 201);
+  assert.equal((await upload(d.id_donacion, account)).status, 201);
   assert.equal((await upload(d.id_donacion, account)).status, 201);
   const parallel = await Promise.all([upload(d.id_donacion, account), upload(d.id_donacion, account)]);
   assert.deepEqual(parallel.map(result => result.status).sort(), [201, 409]);
   assert.equal(parallel.find(result => result.status === 409).data.error.code, 'PHOTO_LIMIT');
   const detail = (await call('GET', `/api/donaciones/${d.id_donacion}`, undefined, account)).data.data;
-  assert.equal(detail.fotos.length, 3); assert.equal(detail.fotos[0].url, first.data.data.url);
+  assert.equal(detail.fotos.length, 5); assert.equal(detail.fotos[0].url, first.data.data.url);
   assert.equal((await one('SELECT COUNT(*) AS total FROM donacion_fotos WHERE id_donacion = ? AND es_principal = 1', [d.id_donacion])).total, 1);
-  assert.equal((await storedFiles()).filter(name => name.startsWith(`donacion_${d.id_donacion}_`)).length, 3);
+  assert.equal((await storedFiles()).filter(name => name.startsWith(`donacion_${d.id_donacion}_`)).length, 5);
 });
 
 test('Fotografías: exige sesión, CSRF, donante verificado y propiedad', async () => {

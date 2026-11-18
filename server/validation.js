@@ -168,6 +168,8 @@ export function donationInput(body, currentCategory) {
     cantidad: quantity(body.cantidad),
     unidad: text(body.unidad, 'unidad', 1, 50),
     descripcion: optionalWords(body.descripcion, 'descripción'),
+    estado_alimento_declarado: optionalText(body.estado_alimento_declarado, 'estado observado', 50),
+    fecha_vencimiento: date(body.fecha_vencimiento, 'fecha de vencimiento', true),
     fecha_disponibilidad: date(body.fecha_disponibilidad, 'fecha de disponibilidad'),
     fecha_limite_recojo: date(body.fecha_limite_recojo, 'fecha límite de recojo'),
     fecha_limite_aprovechamiento_declarada: date(body.fecha_limite_aprovechamiento_declarada, 'fecha límite de aprovechamiento declarada', true),
@@ -183,8 +185,12 @@ export function donationInput(body, currentCategory) {
   };
   const available = Date.parse(value.fecha_disponibilidad), pickup = Date.parse(value.fecha_limite_recojo);
   const limit = value.fecha_limite_aprovechamiento_declarada && Date.parse(value.fecha_limite_aprovechamiento_declarada);
+  const expiration = value.fecha_vencimiento && Date.parse(value.fecha_vencimiento);
+  if (value.estado_alimento_declarado && !['sin_novedad', 'requiere_revision'].includes(value.estado_alimento_declarado)) fail(422, 'FOOD_CONDITION_INVALID', 'Selecciona un estado observado válido.');
   if (pickup <= available) fail(422, 'INVALID_DATES', 'El límite de recojo debe ser posterior a la disponibilidad.');
   if (pickup <= Date.now()) fail(422, 'INVALID_DATES', 'El límite de recojo debe estar en el futuro.');
   if (limit && limit < pickup) fail(422, 'INVALID_DATES', 'El aprovechamiento declarado no puede finalizar antes del límite de recojo.');
+  if (expiration && expiration < pickup) fail(422, 'INVALID_DATES', 'El vencimiento no puede ser antes del límite de recojo.');
+  if (expiration && limit && limit > expiration) fail(422, 'INVALID_DATES', 'La fecha para consumir no puede ser posterior al vencimiento indicado.');
   return value;
 }

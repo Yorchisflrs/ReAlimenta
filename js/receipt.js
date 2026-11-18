@@ -11,28 +11,30 @@
   const when=value=>value?new Intl.DateTimeFormat('es-PE',{timeZone:'America/Lima',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value)).replace(/[  ]/g,' '):'';
   const qty=value=>new Intl.NumberFormat('es-PE',{maximumFractionDigits:2}).format(Number(value||0));
   const states={disponible:'Publicada',pendiente:'Enviada, espera respuesta',aceptada:'Aceptada',rechazada:'Rechazada',cancelada:'Cancelada',en_proceso:'En proceso',finalizada:'Finalizada'};
-  const ANGLES=['De frente','De costado','De cerca'];
+  const ANGLES=['De frente','De costado','De cerca','Del empaque','Detalle adicional'];
   const card=(icon,label,main,extra)=>`<div class="rp-card"><span class="rp-icon"><i class="${icon}"></i></span><div><small>${label}</small><strong>${esc(main)}</strong>${extra?`<span>${esc(extra)}</span>`:''}</div></div>`;
-  const buttons=(back,confirm,text)=>`<div class="mvp-message error" data-form-error tabindex="-1" hidden></div><div class="dialog-actions"><button class="btn btn-secondary" type="button" data-action="${back}"><i class="fa-solid fa-pen"></i> Corregir</button><button class="btn btn-primary" type="button" data-action="${confirm}"><i class="fa-solid fa-check"></i> ${text}</button></div>`;
+  const buttons=(back,confirm,text,draft)=>`<div class="mvp-message error" data-form-error tabindex="-1" hidden></div><div class="dialog-actions"><button class="btn btn-secondary" type="button" data-action="${back}"><i class="fa-solid fa-pen"></i> Corregir</button><button class="btn btn-secondary" type="button" data-action="${draft}"><i class="fa-solid fa-file-pdf"></i> Descargar borrador</button><button class="btn btn-primary" type="button" data-action="${confirm}"><i class="fa-solid fa-check"></i> ${text}</button></div>`;
 
   // d usa los nombres del formulario/API: alimento, categoria, cantidad, unidad, fechas, direccion_recojo...
   // Todos los datos del formulario, en el mismo orden que el comprobante PDF (los vacíos se muestran como tales).
   function donationRows(d,user={},profile={}){
     return [
-      ['Qué vas a donar','fa-solid fa-box-open',[['Alimento',d.alimento],['Tipo de alimento',d.categoria],['Cantidad',`${qty(d.cantidad)} ${show('unidad',d.unidad)}`],['Detalles',d.descripcion||'Sin detalles']]],
+      ['Qué vas a donar','fa-solid fa-box-open',[['Alimento',d.alimento],['Tipo de alimento',d.categoria],['Cantidad',`${qty(d.cantidad)} ${show('unidad',d.unidad)}`],['Estado observado',d.estado_alimento_declarado==='sin_novedad'?'Sin daños visibles':d.estado_alimento_declarado==='requiere_revision'?'Con detalles por revisar':'No indicado'],['Detalles',d.descripcion||'Sin detalles']]],
       ['Cómo se guarda','fa-solid fa-snowflake',[['Forma de guardarlo',show('conservacion',d.conservacion_declarada)],['Empaque',d.envase],['Debe ir frío en el viaje',d.requiere_cadena_frio?'Sí':'No'],['Temperatura',d.temperatura_declarada||'No indicada']]],
-      ['Horario de recojo','fa-regular fa-clock',[['Se puede recoger desde',when(d.fecha_disponibilidad)],['Se puede recoger hasta',when(d.fecha_limite_recojo)],['Consumir antes de',when(d.fecha_limite_aprovechamiento_declarada)||'No indicado'],['Indicaciones para el recojo',d.observaciones||'Sin indicaciones']]],
+      ['Horario de recojo','fa-regular fa-clock',[['Se puede recoger desde',when(d.fecha_disponibilidad)],['Se puede recoger hasta',when(d.fecha_limite_recojo)],['Consumir antes de',when(d.fecha_limite_aprovechamiento_declarada)||'No indicado'],['Vencimiento indicado',when(d.fecha_vencimiento)||'No indicado'],['Indicaciones para el recojo',d.observaciones||'Sin indicaciones']]],
       ['Lugar de recojo','fa-solid fa-location-dot',[['Dirección',d.direccion_recojo],['Distrito',d.distrito||'-'],['Referencia',d.referencia||d.indicaciones_recojo||'Sin referencia'],['Ubicación en el mapa',d.latitud_recojo!=null?`Marcada (${Number(d.latitud_recojo).toFixed(5)}, ${Number(d.longitud_recojo).toFixed(5)})`:'Sin marcar']]],
       ['Quién dona','fa-solid fa-store',[['Negocio',profile.nombre_establecimiento||d.donante_nombre||'-'],['RUC',profile.ruc||'-'],['Representante',user.nombre||profile.responsable||'-'],['Celular o teléfono',user.telefono||'-']]]
     ];
   }
   function preview(d,photos,user={},profile={}){
     return `<div class="receipt-preview">
+      <p class="section-kicker">ASÍ VERÁN TU PUBLICACIÓN</p>
+      <article class="rp-offer-card">${photos[0]?.url?`<img src="${esc(photos[0].url)}" alt="Foto principal del alimento">`:''}<div><span class="rp-chip">${esc(d.categoria)}</span><h3>${esc(d.alimento)}</h3><p>${esc(profile.nombre_establecimiento||'Tu establecimiento')}</p><strong>${qty(d.cantidad)} ${esc(show('unidad',d.unidad))}</strong><p><i class="fa-solid fa-location-dot"></i> ${esc(d.direccion_recojo)} · ${esc(d.distrito)}</p><p><i class="fa-regular fa-clock"></i> Recojo hasta ${esc(when(d.fecha_limite_recojo))}</p></div></article>
       <div class="rp-hero"><div class="rp-qty"><strong>${qty(d.cantidad)}</strong><span>${esc(show('unidad',d.unidad))}</span></div><div><small>VAS A DONAR</small><h3>${esc(d.alimento)}</h3><span class="rp-chip">${esc(d.categoria)}</span></div></div>
-      <div class="rp-photos">${photos.map(p=>`<figure>${p.url?`<img src="${esc(p.url)}" alt="Foto ${esc(p.title.toLowerCase())}">`:'<span class="rp-nophoto"><i class="fa-solid fa-image"></i></span>'}<figcaption>${esc(p.title)}</figcaption></figure>`).join('')}</div>
+      <div class="rp-photos">${photos.filter(p=>p.url).map(p=>`<figure><img src="${esc(p.url)}" alt="Foto ${esc(p.title.toLowerCase())}"><figcaption>${esc(p.title)}</figcaption></figure>`).join('')}</div>
       <div class="rp-sections">${donationRows(d,user,profile).map(([title,icon,rows])=>`<section class="rp-section"><h4><i class="${icon}"></i> ${esc(title)}</h4><dl>${rows.map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></section>`).join('')}</div>
       <p class="rp-note"><i class="fa-solid fa-file-pdf"></i> Al confirmar, tu donación quedará registrada y se descargará un <strong>comprobante en PDF</strong> con estos mismos datos.</p>
-      ${buttons('close-dialog','confirm-publish','Confirmar y publicar')}
+      ${buttons('close-dialog','confirm-publish','Confirmar y publicar','draft-donation')}
     </div>`;
   }
 
@@ -51,7 +53,7 @@
       </div>
       ${d.requiere_cadena_frio&&!r.dispone_cadena_frio?'<div class="mvp-message warning">Este alimento debe mantenerse frío y marcaste que no pueden mantenerlo frío. El donante podría rechazar la solicitud.</div>':''}
       <p class="rp-note"><i class="fa-solid fa-file-pdf"></i> Al confirmar, tu solicitud quedará registrada y se descargará un <strong>comprobante en PDF</strong>. La donación no queda reservada hasta que el donante acepte.</p>
-      ${buttons('edit-request','confirm-request','Confirmar y enviar')}
+      ${buttons('edit-request','confirm-request','Confirmar y enviar','draft-request')}
     </div>`;
   }
 
@@ -80,7 +82,7 @@
     doc.setFont('helvetica','normal');doc.setFontSize(11);doc.t(subtitle,M,26);
     doc.setFontSize(9);doc.t('Alimentos que crean comunidad · Puno, Perú',M,32);
     doc.setFont('helvetica','bold');doc.setFontSize(10);doc.t(label,W-M,17,{align:'right'});
-    doc.setFontSize(24);doc.t(`#${number}`,W-M,29,{align:'right'});
+    doc.setFontSize(24);doc.t(number==null?'BORRADOR':`#${number}`,W-M,29,{align:'right'});
     return doc;
   }
   // Recuadro con fecha de registro, quién registra y estado.
@@ -109,16 +111,17 @@
   async function photos(doc,y,urls,ph=36){
     doc.setTextColor(...ink);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.t('Fotos del alimento',M,y);y+=4;
     const pw=(W-2*M-8)/3;
-    const images=await Promise.all([0,1,2].map(i=>jpeg(urls[i])));
+    const images=await Promise.all(urls.map(url=>jpeg(url)));
     images.forEach((img,i)=>{
-      const x=M+i*(pw+4);
+      if(i>0 && i%3===0){y+=ph+13;if(y+ph+13>275){doc.addPage();y=20;}}
+      const x=M+(i%3)*(pw+4);
       doc.setFillColor(245,247,240);doc.rect(x,y,pw,ph,'F');
       if(img){
         // Ajustar dentro del recuadro conservando la proporción.
         let w=pw,h=pw/img.ratio;if(h>ph){h=ph;w=ph*img.ratio;}
         doc.addImage(img.data,'JPEG',x+(pw-w)/2,y+(ph-h)/2,w,h);
       }else{doc.setTextColor(...muted);doc.setFontSize(8);doc.t('Sin foto',x+pw/2,y+ph/2,{align:'center'});}
-      doc.setTextColor(...ink);doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.t(ANGLES[i],x+pw/2,y+ph+5,{align:'center'});
+      doc.setTextColor(...ink);doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.t(ANGLES[i]||`Foto ${i+1}`,x+pw/2,y+ph+5,{align:'center'});
     });
     return y+ph+13;
   }
@@ -137,7 +140,8 @@
       return yy;
     };
     for(let i=0;i<list.length;i+=2){
-      if(i>0&&y>228){doc.addPage();y=20;}
+      const height=section=>section?10+section[1].reduce((total,[,value])=>total+5.5+Math.min(8,doc.splitTextToSize(clean(value),cw-6).length)*4,0):0;
+      if(y+Math.max(height(list[i]),height(list[i+1]))>280){doc.addPage();y=20;}
       y=Math.max(draw(list[i],M,y),list[i+1]?draw(list[i+1],M+cw+6,y):0)+4;
     }
     return y-4;
@@ -154,22 +158,23 @@
     all.forEach((note,i)=>doc.t(note,M,foot+11+i*4));
   }
 
-  async function download(d,user={},profile={},localPhotos=[]){
-    const doc=newDoc('Comprobante de registro de donación','DONACIÓN N.º',d.id_donacion);
-    let y=registryBox(doc,46,d.fecha_creacion,'DONANTE',profile.nombre_establecimiento||d.donante_nombre||'',user.correo||user.nombre||'',states[d.estado]||(d.estado?String(d.estado).replace(/_/g,' '):'Publicada'));
+  async function download(d,user={},profile={},localPhotos=[],draft=false){
+    const doc=newDoc(draft?'Vista previa de donación sin publicar':'Comprobante de registro de donación',draft?'VISTA PREVIA':'DONACIÓN N.º',draft?null:d.id_donacion);
+    let y=registryBox(doc,46,d.fecha_creacion,'DONANTE',profile.nombre_establecimiento||d.donante_nombre||'',user.correo||user.nombre||'',draft?'Sin publicar':states[d.estado]||(d.estado?String(d.estado).replace(/_/g,' '):'Publicada'));
     y=tiles(doc,y,[[qty(d.cantidad),show('unidad',d.unidad)],[d.alimento,'Qué alimento es'],[d.categoria,'Tipo de alimento']]);
-    y=await photos(doc,y,[0,1,2].map(i=>localPhotos[i]?.url||d.fotos?.[i]?.url));
+    const imageUrls=localPhotos.some(p=>p?.url)?localPhotos.filter(p=>p?.url).map(p=>p.url):(d.fotos||[]).map(p=>p.url);
+    if(imageUrls.length)y=await photos(doc,y,imageUrls);
     y=sections(doc,y,donationRows(d,user,profile).map(([title,,rows])=>[title,rows]));
     const code=d.codigo_verificacion||'';
-    footer(doc,y,code,[`Documento generado el ${when(new Date())} desde REAlimenta. Conserva este archivo como evidencia del registro.`,'La información y las fotos fueron declaradas por el donante. La plataforma no certifica la calidad del alimento.']);
-    doc.save(`comprobante-donacion-${d.id_donacion}.pdf`);
+    footer(doc,y,draft?'':code,[draft?'Borrador: esta donación aún no ha sido publicada.':`Documento generado el ${when(new Date())} desde REAlimenta. Conserva este archivo como evidencia del registro.`,'La información y las fotos fueron declaradas por el donante. La plataforma no certifica la calidad del alimento.']);
+    doc.save(draft?'borrador-donacion.pdf':`comprobante-donacion-${d.id_donacion}.pdf`);
   }
 
   // r: solicitud tal como la devuelve /api/solicitudes (incluye donacion, organizacion y donante).
-  async function downloadRequest(r,user={},profile={}){
+  async function downloadRequest(r,user={},profile={},draft=false){
     const d=r.donacion||{},org=r.organizacion||profile||{};
-    const doc=newDoc('Comprobante de solicitud de donación','SOLICITUD N.º',r.id_solicitud);
-    let y=registryBox(doc,46,r.fecha_creacion||r.fecha_solicitud,'BENEFICIARIA',org.nombre||r.organizacion_nombre||'',user.correo||user.nombre||'',states[r.estado]||String(r.estado||'Enviada').replace(/_/g,' '));
+    const doc=newDoc(draft?'Vista previa de solicitud sin enviar':'Comprobante de solicitud de donación',draft?'VISTA PREVIA':'SOLICITUD N.º',draft?null:r.id_solicitud);
+    let y=registryBox(doc,46,r.fecha_creacion||r.fecha_solicitud,'BENEFICIARIA',org.nombre||r.organizacion_nombre||'',user.correo||user.nombre||'',draft?'Sin enviar':states[r.estado]||String(r.estado||'Enviada').replace(/_/g,' '));
     y=tiles(doc,y,[[qty(r.cantidad_solicitada||d.cantidad),show('unidad',d.unidad||r.unidad)],[d.alimento||r.alimento,`Donación #${r.id_donacion}`],[r.donante?.nombre_establecimiento||r.donante_nombre||'-','Quién dona']]);
     if(d.fotos?.length)y=await photos(doc,y,d.fotos.map(f=>f.url),30);
     y=sections(doc,y,[
@@ -179,8 +184,8 @@
       ['Mensaje para el donante',[['Mensaje',r.observaciones||'-']]]
     ]);
     const code=r.codigo_verificacion||'';
-    footer(doc,y,code,[`Documento generado el ${when(new Date())} desde REAlimenta. Conserva este archivo como evidencia de tu solicitud.`,'La solicitud no reserva la donación: queda confirmada solo cuando el donante la acepta.']);
-    doc.save(`comprobante-solicitud-${r.id_solicitud}.pdf`);
+    footer(doc,y,draft?'':code,[draft?'Borrador: esta solicitud todavía no se ha enviado.':`Documento generado el ${when(new Date())} desde REAlimenta. Conserva este archivo como evidencia de tu solicitud.`,'La solicitud no reserva la donación: queda confirmada solo cuando el donante la acepta.']);
+    doc.save(draft?'borrador-solicitud.pdf':`comprobante-solicitud-${r.id_solicitud}.pdf`);
   }
   window.REAReceipt={preview,download,requestPreview,downloadRequest};
 })();

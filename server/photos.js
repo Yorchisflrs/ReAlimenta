@@ -11,7 +11,7 @@ import { fail } from './errors.js';
 import { photoFromRow, LOCAL_PHOTO_FILE } from './mappers.js';
 
 // Tres fotos por donación: de frente, de costado y de cerca.
-export const MAX_PHOTOS = 3;
+export const MAX_PHOTOS = 5;
 const MAX_BYTES = 5 * 1024 * 1024;
 const directory = config.uploadsDir;
 const DECLARED = { 'image/jpeg': 'image/jpeg', 'image/jpg': 'image/jpeg', 'image/pjpeg': 'image/jpeg', 'image/png': 'image/png', 'image/webp': 'image/webp' };
@@ -159,7 +159,7 @@ photoRouter.post('/donaciones/:id/foto', requireAuth, requireRole('donante'), as
     const photo = await transaction(async client => {
       const d = await canEdit(req.user, donationId, client, true);
       const total = Number((await client.query('SELECT COUNT(*) AS total FROM donacion_fotos WHERE id_donacion = ?', [d.id_donacion])).rows[0].total);
-      if (total >= MAX_PHOTOS) fail(409, 'PHOTO_LIMIT', `Cada donación lleva ${MAX_PHOTOS} fotos: de frente, de costado y de cerca. Ya están completas.`);
+      if (total >= MAX_PHOTOS) fail(409, 'PHOTO_LIMIT', `Puedes subir hasta ${MAX_PHOTOS} fotos por donación. Ya alcanzaste el límite.`);
       await mkdir(directory, { recursive: true });
       await writeFile(destination, result.data, { flag: 'wx' });
       written = true;
@@ -181,12 +181,13 @@ export const mediaRouter = Router();
 mediaRouter.use(requireAuth);
 mediaRouter.get('/:archivo', async (req, res) => {
   if (!PHOTO_FILE.test(req.params.archivo)) fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
-  const row = (await db.query(`SELECT d.id_donacion, d.id_donante, d.estado, d.fecha_limite_recojo, dt.estado_verificacion, u.estado AS donante_estado
+  const row = (await db.query(`SELECT d.id_donacion, d.id_donante, d.estado, d.borrador, d.fecha_limite_recojo, dt.estado_verificacion, u.estado AS donante_estado
     FROM donacion_fotos f JOIN donaciones d ON d.id_donacion = f.id_donacion JOIN donantes dt ON dt.id_donante = d.id_donante
     JOIN usuarios u ON u.id_usuario = dt.id_usuario WHERE f.nombre_archivo = ?`, [req.params.archivo])).rows[0];
   if (!row) fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
   if (req.user.rol === 'donante' && row.id_donante !== req.user.perfil?.id_donante) fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
-  if (req.user.rol === 'organizacion' && !(row.estado === 'disponible' && Date.parse(row.fecha_limite_recojo) > Date.now() && row.estado_verificacion === 'verificado' && canSignIn(row.donante_estado))) {
+  if (req.user.rol === 'organizacion' && row.borrador) fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
+  if (req.user.rol === 'organizacion' && !(row.estado === 'disponible' && !row.borrador && Date.parse(row.fecha_limite_recojo) > Date.now() && row.estado_verificacion === 'verificado' && canSignIn(row.donante_estado))) {
     if (!(await db.query('SELECT 1 FROM solicitudes WHERE id_donacion = ? AND id_organizacion = ?', [row.id_donacion, req.user.perfil?.id_organizacion || -1])).rowCount)
       fail(404, 'PHOTO_NOT_FOUND', 'No se encontró la fotografía.');
   }
