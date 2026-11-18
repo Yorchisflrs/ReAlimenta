@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # DEMOSTRACIÓN ACADÉMICA DE REAlimenta 2.0
 
 Curso: Taller de Desarrollo de Software. Fecha de evidencia: 21 de octubre de 2026. Objetivo: demostrar dos módulos reales, gestión de donaciones y gestión de solicitudes, con PostgreSQL, autorización, carretera real y evaluación logística.

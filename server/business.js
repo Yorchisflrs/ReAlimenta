@@ -5,12 +5,12 @@ import { requireAuth, requireRole, requireVerified, userFromRow, publicUser, can
 import { fail } from './errors.js';
 import { id, text, optionalText, number, date, donationInput, registrationProfile, registrationEmail, bool, phone, personName, words, optionalWords } from './validation.js';
 import { createTracking, custodySummaries } from './custody.js';
-import { evaluateLogistics, routeFromEvaluation, attachEvaluationDetails, pickupFromEvaluation, evaluationMatches } from './logistics.js';
+import { notify } from './notifications.js';
 import { attachPhotos, saveLocalPhoto, removeLocalPhoto, removeDonationFiles } from './photos.js';
 import { unlink } from 'node:fs/promises';
 import {
   ACTIVE_REQUEST_STATES, PENDING_REQUEST_STATES, COLD_CHAIN_MESSAGE, donationFromRow, toDonationColumns, requestFields,
-  donorProfile, organizationProfile, evaluationFromRow, splitAddress, parseDetail, likePattern, likeEscape, localPhotoUrl, storedFoodTypes
+  donorProfile, organizationProfile, splitAddress, parseDetail, likePattern, likeEscape, localPhotoUrl, storedFoodTypes
 } from './mappers.js';
 
 const ELIGIBLE_USER = "u.estado IN ('activo','pendiente')";
@@ -20,33 +20,6 @@ const CATALOG = `d.estado = 'disponible' AND d.fecha_limite_recojo > NOW()
   AND dt.estado_verificacion = 'verificado' AND ${ELIGIBLE_USER}`;
 const DONATION_STATES = { vencida: 'expirada' };
 
-async function attachPlans(rows, user, client = db) {
-  if (!rows.length) return rows;
-  const ids = rows.map(d => d.id_donacion);
-  const params = [...ids];
-  let org = '';
-  if (user.rol === 'organizacion') { org = ' AND id_organizacion = ?'; params.push(user.perfil?.id_organizacion || -1); }
-  const saved = (await client.query(`SELECT e.*, o.nombre AS destino_nombre, o.direccion AS destino_direccion, o.latitud AS actual_destino_latitud, o.longitud AS actual_destino_longitud
-    FROM evaluaciones_ruta e JOIN organizaciones o ON o.id_organizacion = e.id_organizacion
-    JOIN (SELECT MAX(id_evaluacion) AS id_evaluacion FROM evaluaciones_ruta
-      WHERE id_donacion IN (${placeholders(ids)})${org} AND distancia_km IS NOT NULL AND duracion_estimada_min IS NOT NULL
-      GROUP BY id_donacion) ultima ON ultima.id_evaluacion = e.id_evaluacion`, params)).rows;
-  await attachEvaluationDetails(saved, client);
-  const latest = new Map(saved.map(e => [e.id_donacion, e]));
-  for (const d of rows) {
-    const e = latest.get(d.id_donacion);
-    if (!e) continue;
-    if (!evaluationMatches(e, { latitud: d.latitud_recojo, longitud: d.longitud_recojo }, { latitud: e.actual_destino_latitud, longitud: e.actual_destino_longitud })) continue;
-    const ruta = routeFromEvaluation(e);
-    const input = { preparacion_min: 10, recojo_min: 10, entrega_min: 5, margen_seguridad_min: 15, demora_trafico_min: 0, ...(e.planificacion || {}) };
-    if (d.cadena_custodia) { const t = d.cadena_custodia; Object.assign(input, { etapa_custodia: t.estado, condicion_declarada: t.condicion_declarada, incidencias_criticas: t.incidencias_criticas, incidencias_abiertas: t.incidencias_abiertas, fecha_propuesta: t.fecha_propuesta, dispone_cadena_frio: t.dispone_cadena_frio }); }
-    const moved=['recogido','en_transito','entregado','confirmado'].includes(d.cadena_custodia?.estado);
-    d.plan_ruta = { ruta, ruta_recojo: moved?null:pickupFromEvaluation(e), evaluacion: evaluateLogistics(d, ruta, input), id_organizacion: e.id_organizacion,
-      destino: { nombre: e.destino_nombre, direccion: splitAddress(e.destino_direccion).direccion }, nota: 'Plan preliminar recalculado con el reloj del servidor; confirme conservación y condiciones antes de coordinar.' };
-  }
-  return rows;
-}
-
 const EXPIRED = `estado = 'disponible' AND (fecha_limite_recojo <= NOW() OR fecha_limite_aprovechamiento <= NOW())`;
 export async function expireDonations() {
   if (!(await db.query(`SELECT id_donacion FROM donaciones WHERE ${EXPIRED} LIMIT 1`)).rowCount) return 0;
@@ -54,12 +27,16 @@ export async function expireDonations() {
     const expired = (await client.query(`SELECT id_donacion FROM donaciones WHERE ${EXPIRED} ORDER BY id_donacion FOR UPDATE`)).rows;
     for (const row of expired) {
       await client.query("UPDATE donaciones SET estado = 'expirada', fecha_actualizacion = CURRENT_TIMESTAMP WHERE id_donacion = ?", [row.id_donacion]);
-      const pending = (await client.query(`SELECT id_solicitud FROM solicitudes WHERE id_donacion = ? AND estado IN (${placeholders(PENDING_REQUEST_STATES)}) ORDER BY id_solicitud FOR UPDATE`, [row.id_donacion, ...PENDING_REQUEST_STATES])).rows;
+      const pending = (await client.query(`SELECT s.id_solicitud, o.id_usuario FROM solicitudes s JOIN organizaciones o ON o.id_organizacion = s.id_organizacion
+        WHERE s.id_donacion = ? AND s.estado IN (${placeholders(PENDING_REQUEST_STATES)}) ORDER BY s.id_solicitud FOR UPDATE`, [row.id_donacion, ...PENDING_REQUEST_STATES])).rows;
+      const info = (await client.query('SELECT d.nombre_alimento, dt.id_usuario FROM donaciones d JOIN donantes dt ON dt.id_donante = d.id_donante WHERE d.id_donacion = ?', [row.id_donacion])).rows[0];
       for (const request of pending) {
         await client.query("UPDATE solicitudes SET estado = 'rechazada' WHERE id_solicitud = ?", [request.id_solicitud]);
         await audit(client, null, 'solicitudes', request.id_solicitud, 'rechazar_por_vencimiento', { id_donacion: row.id_donacion, motivo: 'La ventana de recojo de la donación venció.' });
+        await notify(client, request.id_usuario, { titulo: 'Una donación que pediste venció', mensaje: `"${info.nombre_alimento}" llegó a su hora límite de recojo sin que se aceptara tu solicitud.`, tipo: 'solicitud_vencida', id_donacion: row.id_donacion, id_solicitud: request.id_solicitud });
       }
       await audit(client, null, 'donaciones', row.id_donacion, 'vencer', { motivo: 'Se alcanzó una fecha límite declarada.' });
+      await notify(client, info.id_usuario, { titulo: 'Tu donación venció', mensaje: `"${info.nombre_alimento}" llegó a su hora límite de recojo y ya no aparece en el catálogo.`, tipo: 'donacion_vencida', id_donacion: row.id_donacion });
     }
     return expired.length;
   });
@@ -83,13 +60,14 @@ async function loadDonations(where, params, user, client = db) {
   await attachPhotos(list, client);
   const custody = await custodySummaries(list.map(d => d.id_donacion), client);
   for (const d of list) d.cadena_custodia = custody.get(d.id_donacion) || null;
-  return attachPlans(list, user, client);
+  return list;
 }
 
-const REQUEST_SELECT = `SELECT s.*, d.*, dt.*, o.*,
+const REQUEST_SELECT = `SELECT s.*, d.*, dt.*, o.*, ud.telefono, ud.id_usuario, uo.id_usuario,
   (SELECT e.id_entrega FROM entregas e WHERE e.id_solicitud = s.id_solicitud LIMIT 1) AS id_seguimiento
   FROM solicitudes s JOIN donaciones d ON d.id_donacion = s.id_donacion
-  JOIN donantes dt ON dt.id_donante = d.id_donante JOIN organizaciones o ON o.id_organizacion = s.id_organizacion`;
+  JOIN donantes dt ON dt.id_donante = d.id_donante JOIN usuarios ud ON ud.id_usuario = dt.id_usuario
+  JOIN organizaciones o ON o.id_organizacion = s.id_organizacion JOIN usuarios uo ON uo.id_usuario = o.id_usuario`;
 const DECISIONS = ['crear', 'reenviar', 'aceptar', 'rechazar', 'cancelar', 'rechazar_no_seleccionada', 'rechazar_por_vencimiento', 'cancelar_por_donacion'];
 // La tabla solicitudes no guarda motivo ni fecha de decisión: se recuperan de auditoria.
 async function attachDecisions(requests, client) {
@@ -106,22 +84,24 @@ async function attachDecisions(requests, client) {
     if (!['crear', 'reenviar'].includes(event.accion)) r.motivo_decision = parseDetail(event.descripcion).motivo || null;
   }
 }
-async function loadRequests(where, params, client = db) {
+// viewer: quien consulta. El teléfono del donante solo lo ve la beneficiaria cuya solicitud fue aceptada
+// (y administración); el de quien recoge ya viaja en la solicitud y lo ve el donante.
+async function loadRequests(where, params, client = db, viewer = null) {
   const rows = (await client.query(`${REQUEST_SELECT} ${where}`, params, { nestTables: true })).rows;
-  const list = rows.map(({ s, d, dt, o, '': extra }) => ({
-    ...requestFields(s), alimento: d.nombre_alimento, cantidad: d.cantidad, unidad: d.unidad, donacion_estado: d.estado,
-    donante_nombre: dt.nombre_establecimiento, organizacion_nombre: o.nombre,
-    donacion: donationFromRow(d, dt), organizacion: organizationProfile(o), donante: donorProfile(dt), evaluacion_ruta: null,
-    id_seguimiento: extra?.id_seguimiento || null
-  }));
+  const list = rows.map(({ s, d, dt, o, ud, uo, '': extra }) => {
+    const contact = s.estado === 'aceptada' && (viewer?.rol === 'administrador' || (viewer?.rol === 'organizacion' && viewer.perfil?.id_organizacion === s.id_organizacion));
+    return {
+      ...requestFields(s), alimento: d.nombre_alimento, cantidad: d.cantidad, unidad: d.unidad, donacion_estado: d.estado,
+      donante_nombre: dt.nombre_establecimiento, organizacion_nombre: o.nombre,
+      donacion: donationFromRow(d, dt), organizacion: organizationProfile(o), donante: donorProfile(dt),
+      contacto_donante: contact ? { responsable: dt.responsable || '', telefono: ud.telefono || '' } : null,
+      usuario_donante: ud.id_usuario, usuario_organizacion: uo.id_usuario,
+      id_seguimiento: extra?.id_seguimiento || null
+    };
+  });
   if (!list.length) return list;
   await attachPhotos(list.map(r => r.donacion), client);
   await attachDecisions(list, client);
-  const ids = list.map(r => r.id_solicitud);
-  const evaluations = (await client.query(`SELECT e.* FROM evaluaciones_ruta e JOIN (SELECT MAX(id_evaluacion) AS id_evaluacion FROM evaluaciones_ruta
-    WHERE id_solicitud IN (${placeholders(ids)}) GROUP BY id_solicitud) ultima ON ultima.id_evaluacion = e.id_evaluacion`, ids)).rows;
-  const byRequest = new Map(evaluations.map(e => [e.id_solicitud, e]));
-  for (const r of list) r.evaluacion_ruta = evaluationFromRow(byRequest.get(r.id_solicitud));
   return list;
 }
 
@@ -167,8 +147,8 @@ businessRouter.get('/donaciones/:id', async (req, res) => {
     if (!own.rowCount) fail(403, 'FORBIDDEN', 'La donación no está disponible en el catálogo.');
   }
   row.solicitudes = req.user.rol === 'organizacion'
-    ? await loadRequests('WHERE s.id_donacion = ? AND s.id_organizacion = ? ORDER BY s.fecha_solicitud DESC, s.id_solicitud DESC', [row.id_donacion, orgId])
-    : await loadRequests('WHERE s.id_donacion = ? ORDER BY s.fecha_solicitud DESC, s.id_solicitud DESC', [row.id_donacion]);
+    ? await loadRequests('WHERE s.id_donacion = ? AND s.id_organizacion = ? ORDER BY s.fecha_solicitud DESC, s.id_solicitud DESC', [row.id_donacion, orgId], db, req.user)
+    : await loadRequests('WHERE s.id_donacion = ? ORDER BY s.fecha_solicitud DESC, s.id_solicitud DESC', [row.id_donacion], db, req.user);
   if (row.estado === 'cancelada') {
     const canceled = (await db.query("SELECT descripcion FROM auditoria WHERE tabla_afectada = 'donaciones' AND id_registro = ? AND accion = 'cancelar' ORDER BY id_auditoria DESC LIMIT 1", [row.id_donacion])).rows[0];
     row.motivo_cancelacion = canceled ? parseDetail(canceled.descripcion).motivo || null : null;
@@ -178,6 +158,8 @@ businessRouter.get('/donaciones/:id', async (req, res) => {
 
 businessRouter.post('/donaciones', requireRole('donante'), async (req, res) => {
   requireVerified(req);
+  // El donante declara, bajo su responsabilidad, que el alimento está en buen estado para el consumo.
+  if (req.body.declaracion_buen_estado !== true) fail(422, 'DECLARATION_REQUIRED', 'Para publicar, confirma que el alimento está en buen estado y que la información es correcta.');
   const value = donationInput(req.body);
   const columns = Object.entries(toDonationColumns(value, req.user.perfil));
   const donationId = await transaction(async client => {
@@ -185,7 +167,7 @@ businessRouter.post('/donaciones', requireRole('donante'), async (req, res) => {
       VALUES (?, ${columns.map(() => '?').join(', ')})`, [req.user.perfil.id_donante, ...columns.map(([, v]) => v)]);
     await client.query("INSERT INTO seguimientos (id_donacion, id_usuario, etapa, responsable, observaciones) VALUES (?, ?, 'publicada', ?, ?)",
       [created.insertId, req.user.id_usuario, req.user.perfil.nombre_establecimiento.slice(0, 150), 'Donación publicada por el donante.']);
-    await audit(client, req.user.id_usuario, 'donaciones', created.insertId, 'crear', { alimento: value.alimento });
+    await audit(client, req.user.id_usuario, 'donaciones', created.insertId, 'crear', { alimento: value.alimento, declaracion_buen_estado: true });
     return created.insertId;
   });
   const [row] = await loadDonations('WHERE d.id_donacion = ?', [donationId], req.user);
@@ -200,7 +182,7 @@ businessRouter.patch('/donaciones/:id', requireRole('donante'), async (req, res)
     checkAvailable(existing);
     if ((await client.query(`SELECT 1 FROM solicitudes WHERE id_donacion = ? AND estado IN (${placeholders(ACTIVE_REQUEST_STATES)}) LIMIT 1`, [existing.id_donacion, ...ACTIVE_REQUEST_STATES])).rowCount)
       fail(409, 'DONATION_HAS_REQUESTS', 'No se puede editar una donación con solicitudes activas. Cancele la publicación con un motivo si las condiciones cambiaron.');
-    const value = donationInput({ ...donationFromRow(existing, req.user.perfil), ...req.body });
+    const value = donationInput({ ...donationFromRow(existing, req.user.perfil), ...req.body }, existing.categoria);
     const columns = Object.entries(toDonationColumns(value, req.user.perfil));
     await client.query(`UPDATE donaciones SET ${columns.map(([key]) => `${key} = ?`).join(', ')}, fecha_actualizacion = CURRENT_TIMESTAMP
       WHERE id_donacion = ?`, [...columns.map(([, v]) => v), existing.id_donacion]);
@@ -210,22 +192,29 @@ businessRouter.patch('/donaciones/:id', requireRole('donante'), async (req, res)
   const [row] = await loadDonations('WHERE d.id_donacion = ?', [donationId], req.user);
   res.json({ data: row });
 });
+// Cancela una donación disponible o asignada (antes del recojo) y sus solicitudes activas, avisando a las beneficiarias.
+// who: "Donante" o "Administración", para el texto del aviso.
+export async function cancelDonation(client, actorId, existing, motivo, who = 'El donante', action = 'cancelar') {
+  if (!['disponible', 'en_proceso'].includes(existing.estado)) fail(409, 'INVALID_STATE', 'La donación ya está cancelada, finalizada o vencida.');
+  const delivery = (await client.query('SELECT estado FROM entregas WHERE id_donacion = ? FOR UPDATE', [existing.id_donacion])).rows[0];
+  if (delivery && delivery.estado !== 'pendiente') fail(409, 'CUSTODY_STARTED', 'El alimento ya fue recogido. Si hubo un problema, regístralo como incidencia en el seguimiento.');
+  await client.query("UPDATE donaciones SET estado = 'cancelada', fecha_actualizacion = CURRENT_TIMESTAMP WHERE id_donacion = ?", [existing.id_donacion]);
+  const affected = (await client.query(`SELECT s.id_solicitud, o.id_usuario FROM solicitudes s JOIN organizaciones o ON o.id_organizacion = s.id_organizacion
+    WHERE s.id_donacion = ? AND s.estado IN (${placeholders(ACTIVE_REQUEST_STATES)}) ORDER BY s.id_solicitud FOR UPDATE`, [existing.id_donacion, ...ACTIVE_REQUEST_STATES])).rows;
+  for (const request of affected) {
+    await client.query("UPDATE solicitudes SET estado = 'cancelada' WHERE id_solicitud = ?", [request.id_solicitud]);
+    await audit(client, actorId, 'solicitudes', request.id_solicitud, 'cancelar_por_donacion', { motivo: `${who} canceló la donación: ${motivo}` });
+    await notify(client, request.id_usuario, { titulo: 'Se canceló una donación que pediste', mensaje: `${who} canceló "${existing.nombre_alimento}". Motivo: ${motivo}`, tipo: 'donacion_cancelada', id_donacion: existing.id_donacion, id_solicitud: request.id_solicitud });
+  }
+  await audit(client, actorId, 'donaciones', existing.id_donacion, action, { motivo });
+}
 businessRouter.post('/donaciones/:id/cancelar', requireRole('donante'), async (req, res) => {
   const motivo = text(req.body.motivo, 'motivo de cancelación', 5, 1000);
   await expireDonations();
   const donationId = await transaction(async client => {
     const existing = await lockedDonation(client, id(req.params.id));
     donationOwner(req, existing);
-    if (!['disponible', 'en_proceso'].includes(existing.estado)) fail(409, 'INVALID_STATE', 'La donación ya está cancelada, finalizada o vencida.');
-    const delivery = (await client.query('SELECT estado FROM entregas WHERE id_donacion = ? FOR UPDATE', [existing.id_donacion])).rows[0];
-    if (delivery && delivery.estado !== 'pendiente') fail(409, 'CUSTODY_STARTED', 'El recojo ya fue registrado. Gestione el problema mediante una incidencia para conservar la cadena de custodia.');
-    await client.query("UPDATE donaciones SET estado = 'cancelada', fecha_actualizacion = CURRENT_TIMESTAMP WHERE id_donacion = ?", [existing.id_donacion]);
-    const affected = (await client.query(`SELECT id_solicitud FROM solicitudes WHERE id_donacion = ? AND estado IN (${placeholders(ACTIVE_REQUEST_STATES)}) ORDER BY id_solicitud FOR UPDATE`, [existing.id_donacion, ...ACTIVE_REQUEST_STATES])).rows;
-    for (const request of affected) {
-      await client.query("UPDATE solicitudes SET estado = 'cancelada' WHERE id_solicitud = ?", [request.id_solicitud]);
-      await audit(client, req.user.id_usuario, 'solicitudes', request.id_solicitud, 'cancelar_por_donacion', { motivo: `Donante canceló la donación: ${motivo}` });
-    }
-    await audit(client, req.user.id_usuario, 'donaciones', existing.id_donacion, 'cancelar', { motivo });
+    await cancelDonation(client, req.user.id_usuario, existing, motivo);
     return existing.id_donacion;
   });
   const [row] = await loadDonations('WHERE d.id_donacion = ?', [donationId], req.user);
@@ -257,7 +246,7 @@ businessRouter.get('/solicitudes', async (req, res) => {
   else if (req.user.rol === 'organizacion') { params.push(req.user.perfil?.id_organizacion || -1); conditions.push('s.id_organizacion = ?'); }
   if (req.query.id_donacion) { params.push(id(req.query.id_donacion)); conditions.push('s.id_donacion = ?'); }
   if (req.query.estado) { params.push(String(req.query.estado)); conditions.push('s.estado = ?'); }
-  res.json({ data: await loadRequests(`${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY s.fecha_solicitud DESC, s.id_solicitud DESC LIMIT 200`, params) });
+  res.json({ data: await loadRequests(`${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY s.fecha_solicitud DESC, s.id_solicitud DESC LIMIT 200`, params, db, req.user) });
 });
 function requestInput(body) {
   return {
@@ -311,8 +300,9 @@ businessRouter.patch('/solicitudes/:id', requireRole('organizacion'), async (req
     const entries = Object.entries(requestColumns(value, donation));
     await client.query(`UPDATE solicitudes SET ${entries.map(([key]) => `${key} = ?`).join(', ')} WHERE id_solicitud = ?`, [...entries.map(([, v]) => v), requestId]);
     await audit(client, req.user.id_usuario, 'solicitudes', requestId, 'editar', { id_donacion: donation.id_donacion, cadena_frio_declarada: value.dispone_cadena_frio });
+    await notify(client, await donorUserId(client, donation), { titulo: 'Una beneficiaria cambió su solicitud', mensaje: `${req.user.perfil.nombre} actualizó su solicitud para "${donation.nombre_alimento}". Ahora llegaría en ${value.tiempo_llegada_min} min.`, tipo: 'solicitud_editada', id_donacion: donation.id_donacion, id_solicitud: requestId });
   });
-  const [row] = await loadRequests('WHERE s.id_solicitud = ?', [requestId]);
+  const [row] = await loadRequests('WHERE s.id_solicitud = ?', [requestId], db, req.user);
   res.json({ data: row });
 });
 // Una solicitud aceptada ya tiene recojo y custodia: esa no se elimina, se gestiona desde el seguimiento.
@@ -326,6 +316,8 @@ businessRouter.delete('/solicitudes/:id', requireRole('organizacion'), async (re
         fail(409, 'REQUEST_HAS_HISTORY', 'Esta solicitud tiene recojo o incidencias registradas y no se puede eliminar.');
     await client.query('DELETE FROM notificaciones WHERE id_solicitud = ?', [requestId]);
     await client.query('DELETE FROM solicitudes WHERE id_solicitud = ?', [requestId]);
+    if (PENDING_REQUEST_STATES.includes(request.estado))
+      await notify(client, await donorUserId(client, donation), { titulo: 'Una beneficiaria retiró su solicitud', mensaje: `${req.user.perfil.nombre} retiró su solicitud para "${donation.nombre_alimento}".`, tipo: 'solicitud_retirada', id_donacion: donation.id_donacion });
     await audit(client, req.user.id_usuario, 'solicitudes', requestId, 'eliminar', { id_donacion: donation.id_donacion, estado_anterior: request.estado });
   });
   res.json({ data: { id_solicitud: requestId, eliminada: true } });
@@ -361,6 +353,7 @@ businessRouter.post('/donaciones/:id/solicitudes', requireRole('organizacion'), 
     }
     await client.query("INSERT INTO seguimientos (id_donacion, id_usuario, etapa, responsable, observaciones) VALUES (?, ?, 'solicitud_recibida', ?, ?)",
       [donation.id_donacion, req.user.id_usuario, String(req.user.perfil.nombre || '').slice(0, 150), `Solicitud #${requestId} registrada por la beneficiaria.`]);
+    await notify(client, await donorUserId(client, donation), { titulo: 'Nueva solicitud para tu donación', mensaje: `${req.user.perfil.nombre} pidió "${donation.nombre_alimento}". Dice que llegaría en ${value.tiempo_llegada_min} min.`, tipo: 'solicitud_nueva', id_donacion: donation.id_donacion, id_solicitud: requestId });
     return requestId;
   });
   const row = (await db.query('SELECT * FROM solicitudes WHERE id_solicitud = ?', [requestId])).rows[0];
@@ -368,8 +361,12 @@ businessRouter.post('/donaciones/:id/solicitudes', requireRole('organizacion'), 
 });
 
 const NEXT_STATE = { aceptar: 'aceptada', rechazar: 'rechazada', cancelar: 'cancelada' };
+const donorUserId = async (client, donation) => (await client.query('SELECT id_usuario FROM donantes WHERE id_donante = ?', [donation.id_donante])).rows[0]?.id_usuario;
+const organizationUserId = async (client, requestId) => (await client.query('SELECT o.id_usuario FROM solicitudes s JOIN organizaciones o ON o.id_organizacion = s.id_organizacion WHERE s.id_solicitud = ?', [requestId])).rows[0]?.id_usuario;
 for (const action of ['aceptar', 'rechazar', 'cancelar']) {
   businessRouter.post(`/solicitudes/:id/${action}`, requireRole(action === 'cancelar' ? 'organizacion' : 'donante'), async (req, res) => {
+    // Aceptar compromete un recojo: solo un donante verificado puede hacerlo.
+    if (action === 'aceptar') requireVerified(req);
     const requestId = id(req.params.id);
     const indicated = req.body.id_donacion == null || req.body.id_donacion === '' ? null : id(req.body.id_donacion);
     const motivo = action === 'aceptar' ? optionalText(req.body.motivo, 'motivo', 1000) : text(req.body.motivo, 'motivo', 5, 1000);
@@ -396,6 +393,7 @@ for (const action of ['aceptar', 'rechazar', 'cancelar']) {
         for (const other of competitors) {
           await client.query("UPDATE solicitudes SET estado = 'rechazada' WHERE id_solicitud = ?", [other.id_solicitud]);
           await audit(client, req.user.id_usuario, 'solicitudes', other.id_solicitud, 'rechazar_no_seleccionada', { motivo: 'Otra solicitud fue seleccionada.', id_solicitud_aceptada: requestId });
+          await notify(client, await organizationUserId(client, other.id_solicitud), { titulo: 'Tu solicitud no fue seleccionada', mensaje: `El donante eligió otra solicitud para "${donation.nombre_alimento}". Si vuelve a estar disponible, te avisaremos.`, tipo: 'solicitud_no_seleccionada', id_donacion: donation.id_donacion, id_solicitud: other.id_solicitud });
         }
         await client.query("UPDATE donaciones SET estado = 'en_proceso', fecha_actualizacion = CURRENT_TIMESTAMP WHERE id_donacion = ?", [donation.id_donacion]);
         try {
@@ -410,8 +408,14 @@ for (const action of ['aceptar', 'rechazar', 'cancelar']) {
         await createTracking(client, requestId, req.user.id_usuario);
       } else await client.query('UPDATE solicitudes SET estado = ? WHERE id_solicitud = ?', [NEXT_STATE[action], requestId]);
       await audit(client, req.user.id_usuario, 'solicitudes', requestId, action, { motivo: motivo || null, id_donacion: donation.id_donacion });
+      const notice = {
+        aceptar: [await organizationUserId(client, requestId), '¡Aceptaron tu solicitud!', `El donante aceptó tu solicitud para "${donation.nombre_alimento}". Revisa el seguimiento: ahí está su teléfono para coordinar el recojo.`],
+        rechazar: [await organizationUserId(client, requestId), 'Rechazaron tu solicitud', `El donante rechazó tu solicitud para "${donation.nombre_alimento}". Motivo: ${motivo}`],
+        cancelar: [await donorUserId(client, donation), 'Una beneficiaria canceló su solicitud', `${req.user.perfil?.nombre || 'La beneficiaria'} canceló su solicitud para "${donation.nombre_alimento}". Motivo: ${motivo}`]
+      }[action];
+      await notify(client, notice[0], { titulo: notice[1], mensaje: notice[2], tipo: `solicitud_${NEXT_STATE[action]}`, id_donacion: donation.id_donacion, id_solicitud: requestId });
     });
-    const [row] = await loadRequests('WHERE s.id_solicitud = ?', [requestId]);
+    const [row] = await loadRequests('WHERE s.id_solicitud = ?', [requestId], db, req.user);
     res.json({ data: row });
   });
 }
@@ -431,7 +435,7 @@ businessRouter.patch('/perfil', async (req, res) => {
   // Las cuentas de prueba conservan su correo: el inicio de sesión de demostración depende de él.
   if (correo !== req.user.correo && isDemoEmail(req.user.correo)) fail(409, 'DEMO_EMAIL_LOCKED', 'El correo de una cuenta de prueba no se puede cambiar.');
   const next = req.user.rol === 'administrador' ? null
-    : registrationProfile({ ...req.body, perfil: { ...req.user.perfil, ruc: undefined, tipo_organizacion: undefined, numero_beneficiarios: undefined, ...(req.body.perfil || req.body) } }, req.user.rol, true);
+    : registrationProfile({ ...req.body, perfil: { ...req.user.perfil, ruc: undefined, tipo_organizacion: undefined, numero_beneficiarios: undefined, ...(req.body.perfil || req.body) } }, req.user.rol, true, { tipo_organizacion: req.user.perfil?.tipo_organizacion });
   // Foto nueva opcional: se guarda antes y, si algo falla, se borra; la anterior se borra solo al confirmar.
   const photo = next && req.body.foto ? await saveLocalPhoto(req.body.foto) : null;
   let previousPhoto = null, result;
@@ -499,7 +503,6 @@ export async function getStats() {
     (SELECT COUNT(*) FROM donaciones WHERE estado = 'finalizada') AS finalizadas,
     (SELECT COUNT(*) FROM solicitudes) AS solicitudes,
     (SELECT COUNT(*) FROM solicitudes WHERE estado = 'pendiente') AS solicitudes_pendientes,
-    (SELECT COUNT(*) FROM evaluaciones_ruta) AS evaluaciones_logisticas,
     (SELECT COUNT(*) FROM usuarios WHERE correo LIKE ?) AS cuentas_demostracion`, [`%${likeEscape(`@${config.demoEmailDomain}`)}`])).rows[0];
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
 }

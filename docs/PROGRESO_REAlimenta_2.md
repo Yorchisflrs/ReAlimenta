@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # Progreso REAlimenta 2
 
 Fecha de inicio: 20 de octubre de 2026.

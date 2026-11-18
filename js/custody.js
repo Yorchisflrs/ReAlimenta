@@ -1,168 +1,155 @@
-/* Seguimiento registrado en MySQL (entregas, seguimientos e incidencias). Las ubicaciones son declaradas; no hay GPS ni sensores en vivo. */
+/* Seguimiento del recojo registrado en MySQL (entregas, seguimientos e incidencias). Sin GPS ni cálculo de rutas:
+   cada paso lo registra una persona y la beneficiaria declara cuánto tardará en llegar. */
 (() => {
-  let ctx,records=[],selected=null,currentView='seguimiento',filter='todos',plan=null,loadSequence=0;
-  const $=s=>ctx.main.querySelector(s);
-  const names={preparacion:'En preparación',listo:'Listo para recojo',recogido:'Recojo registrado',en_transito:'En traslado',entregado:'Entrega registrada',confirmado:'Recepción confirmada'};
-  const stepNames={aceptacion:'Acuerdo de donación',listo:'Preparación terminada',recogido:'Transferencia de custodia',en_transito:'Salida a traslado',entregado:'Entrega en destino',confirmado:'Recepción confirmada',observacion:'Observación de custodia'};
-  const conditionNames={sin_verificar:'Sin inspección declarada',sin_novedad:'Sin novedades declaradas',requiere_revision:'Requiere revisión',no_conforme:'Condición no conforme'};
-  const stages=['preparacion','listo','recogido','en_transito','entregado','confirmado'];
-  const next={preparacion:'listo',listo:'recogido',recogido:'en_transito',en_transito:'entregado',entregado:'confirmado'};
-  const roleStages={donante:['listo','recogido'],organizacion:['recogido','en_transito','entregado','confirmado'],administrador:['listo','recogido','en_transito','entregado','confirmado']};
-  const e=v=>ctx.escape(v),n=v=>ctx.number(v),dt=v=>ctx.date(v);
-  const button=(text,action,id='',cls='btn-secondary')=>`<button type="button" class="btn ${cls}" data-custody-action="${action}" ${id!==''?`data-id="${Number(id)}"`:''}>${text}</button>`;
-  const badge=(status,cls='')=>`<span class="custody-badge ${cls||status}"><span></span>${e(names[status]||status)}</span>`;
-  function statusTone(t){
-    if(t.incidencias_criticas>0||t.ultimo_hito?.condicion_declarada==='no_conforme'||(t.fecha_limite_aprovechamiento_declarada&&Date.parse(t.fecha_limite_aprovechamiento_declarada)<=Date.now()))return 'rojo';
-    return t.plan_actual?.evaluacion?.estado_viabilidad||t.ultima_evaluacion?.detalle?.estado_viabilidad||'gris';
+  let ctx, records = [], selected = null, currentView = 'seguimiento', filter = 'todos', loadSequence = 0;
+  const $ = s => ctx.main.querySelector(s);
+  const names = { preparacion: 'Recojo acordado', listo: 'Listo para recoger', recogido: 'Recogido', confirmado: 'Recibido', con_problemas: 'Recibido con problemas' };
+  const stepNames = { aceptacion: 'Se aceptó la solicitud', listo: 'El alimento está listo', recogido: 'Se recogió el alimento', en_transito: 'Salió hacia la beneficiaria', entregado: 'Llegó a la beneficiaria', confirmado: 'La beneficiaria lo recibió', con_problemas: 'Recibido con problemas', observacion: 'Nota agregada' };
+  const conditionNames = { sin_verificar: 'No se revisó', sin_novedad: 'En buen estado', requiere_revision: 'Hay algo que revisar', no_conforme: 'En mal estado' };
+  const steps = [['preparacion', 'Aceptada'], ['listo', 'Listo'], ['recogido', 'Recogido'], ['confirmado', 'Recibido']];
+  const closed = t => ['confirmado', 'con_problemas'].includes(t.estado);
+  const e = v => ctx.escape(v), n = v => ctx.number(v), dt = v => ctx.date(v);
+  const button = (text, action, id = '', cls = 'btn-secondary') => `<button type="button" class="btn ${cls}" data-custody-action="${action}" ${id !== '' ? `data-id="${e(id)}"` : ''}>${text}</button>`;
+  const badge = (status, cls = '') => `<span class="custody-badge ${cls || status}"><span></span>${e(names[status] || status)}</span>`;
+
+  // Teléfono para coordinar: llamada y WhatsApp (celular peruano de 9 dígitos que empieza con 9).
+  function contactLinks(phone) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return '<span class="small-muted">Sin teléfono registrado</span>';
+    const mobile = /^9\d{8}$/.test(digits);
+    return `<a class="btn btn-secondary contact-link" href="tel:${mobile ? `+51${digits}` : digits}"><i class="fa-solid fa-phone"></i> ${e(digits)}</a>${mobile ? `<a class="btn btn-primary contact-link" href="https://wa.me/51${digits}" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>` : ''}`;
   }
-  function age(value){const mins=Math.max(0,Math.floor((Date.now()-Date.parse(value))/60000));return mins<60?`hace ${mins} min`:`hace ${Math.floor(mins/60)} h ${mins%60} min`;}
-  async function render(view='seguimiento'){
-    currentView=view;
-    const response=await REA.request('/api/seguimiento');records=response.data;
-    if(view==='incidencias'){await renderIncidents();return;}
-    ctx.setContent(`${ctx.heading('Cada entrega tiene una historia.','Sigue el recorrido, compara los tiempos y registra cada transferencia de custodia.',button('<i class="fa-solid fa-rotate"></i> Actualizar','refresh'))}
-      <div class="custody-overview"><article><span class="custody-overview-icon"><i class="fa-solid fa-truck-fast"></i></span><div><strong>${records.filter(t=>!['confirmado'].includes(t.estado)&&t.donacion_estado!=='cancelada').length}</strong><span>entregas en coordinación</span></div></article><article><span class="custody-overview-icon amber"><i class="fa-solid fa-shield-heart"></i></span><div><strong>${records.reduce((sum,t)=>sum+Number(t.incidencias_abiertas),0)}</strong><span>incidencias por revisar</span></div></article><article><span class="custody-overview-icon"><i class="fa-solid fa-circle-check"></i></span><div><strong>${records.filter(t=>t.estado==='confirmado').length}</strong><span>recepciones confirmadas</span></div></article></div>
-      <div class="custody-layout"><aside class="custody-selector mvp-panel"><div class="custody-selector-head"><span class="section-kicker">TUS RECORRIDOS</span><h2>Del origen al destino</h2></div><label class="custody-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-custody-search aria-label="Buscar seguimiento" placeholder="Alimento, ciudad o destino"></label><div data-custody-list></div><p class="custody-small-note"><i class="fa-solid fa-hand-holding-heart"></i> Cada hito conserva responsable y hora del servidor.</p></aside><div class="custody-detail" data-custody-detail><div class="app-loading"><span class="loading-spinner"></span><p>Consultando la cadena de custodia…</p></div></div></div>`, 'Seguimiento y cadena de custodia');
+  function contactCard(kicker, name, person, phone, note = '') {
+    return `<article class="mvp-panel contact-card"><span class="section-kicker">${kicker}</span><h3>${e(name)}</h3>${person ? `<p><i class="fa-solid fa-user"></i> ${e(person)}</p>` : ''}<div class="contact-actions">${contactLinks(phone)}</div>${note ? `<p class="small-muted">${note}</p>` : ''}</article>`;
+  }
+  window.REAContact = { links: contactLinks, card: contactCard };
+
+  async function render(view = 'seguimiento') {
+    currentView = view;
+    const response = await REA.request('/api/seguimiento'); records = response.data;
+    if (view === 'incidencias') { await renderIncidents(); return; }
+    const open = records.filter(t => !closed(t) && t.donacion_estado !== 'cancelada');
+    ctx.setContent(`${ctx.heading('Recojos y entregas', 'Coordina el recojo con la otra parte y registra cada paso: listo, recogido y recibido.', button('<i class="fa-solid fa-rotate"></i> Actualizar', 'refresh'))}
+      <div class="custody-overview"><article><span class="custody-overview-icon"><i class="fa-solid fa-truck-fast"></i></span><div><strong>${open.length}</strong><span>recojos en curso</span></div></article><article><span class="custody-overview-icon amber"><i class="fa-solid fa-shield-heart"></i></span><div><strong>${records.reduce((sum, t) => sum + Number(t.incidencias_abiertas), 0)}</strong><span>incidencias por revisar</span></div></article><article><span class="custody-overview-icon"><i class="fa-solid fa-circle-check"></i></span><div><strong>${records.filter(closed).length}</strong><span>entregas recibidas</span></div></article></div>
+      <div class="custody-layout"><aside class="custody-selector mvp-panel"><div class="custody-selector-head"><span class="section-kicker">TUS RECOJOS</span><h2>Elige uno</h2></div><label class="custody-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-custody-search aria-label="Buscar recojo" placeholder="Alimento o entidad"></label><div data-custody-list></div></aside><div class="custody-detail" data-custody-detail><div class="app-loading"><span class="loading-spinner"></span><p>Cargando el recojo…</p></div></div></div>`, 'Recojos y entregas');
     renderList();
-    const selectedId=records.find(t=>t.id_seguimiento===selected?.id_seguimiento)?.id_seguimiento||records.find(t=>t.estado==='en_transito')?.id_seguimiento||records[0]?.id_seguimiento;
-    if(selectedId)await select(selectedId);
-    else $('[data-custody-detail]').innerHTML='<div class="mvp-panel mvp-empty"><span class="empty-icon"><i class="fa-solid fa-route"></i></span><h2>Tu próxima ruta empieza con un acuerdo.</h2><p>Al aceptar una solicitud se habilita automáticamente su cadena de custodia. Publica una donación o revisa tus solicitudes.</p></div>';
+    const selectedId = records.find(t => t.id_seguimiento === selected?.id_seguimiento)?.id_seguimiento || open[0]?.id_seguimiento || records[0]?.id_seguimiento;
+    if (selectedId) await select(selectedId);
+    else $('[data-custody-detail]').innerHTML = '<div class="mvp-panel mvp-empty"><span class="empty-icon"><i class="fa-solid fa-route"></i></span><h2>Aún no hay recojos.</h2><p>Cuando el donante acepte una solicitud, el recojo aparecerá aquí con el contacto de la otra parte.</p></div>';
   }
-  function renderList(q=''){
-    const container=$('[data-custody-list]');if(!container)return;
-    const visible=records.filter(t=>`${t.alimento} ${t.origen.nombre} ${t.destino.nombre} ${t.destino.distrito}`.toLocaleLowerCase('es').includes(q.toLocaleLowerCase('es')));
-    container.innerHTML=visible.map(t=>`<button type="button" class="custody-choice ${t.id_seguimiento===selected?.id_seguimiento?'selected':''}" data-custody-action="select" data-id="${t.id_seguimiento}" aria-pressed="${t.id_seguimiento===selected?.id_seguimiento}"><img src="${REAPresentation.photo(t)}" alt="" loading="lazy"><span class="custody-choice-copy"><small>TRAZABILIDAD #${t.id_seguimiento}</small><strong>${e(t.alimento)}</strong><span>${e(t.origen.distrito)} <i class="fa-solid fa-arrow-right"></i> ${e(t.destino.distrito)}</span><em><span class="custody-status-dot ${statusTone(t)}"></span>${e(names[t.estado])}${t.incidencias_abiertas>0?` · ${t.incidencias_abiertas} alerta(s)`:''}</em></span></button>`).join('')||'<p class="small-muted">No hay recorridos que coincidan.</p>';
+  function renderList(q = '') {
+    const container = $('[data-custody-list]'); if (!container) return;
+    const visible = records.filter(t => `${t.alimento} ${t.origen.nombre} ${t.destino.nombre}`.toLocaleLowerCase('es').includes(q.toLocaleLowerCase('es')));
+    container.innerHTML = visible.map(t => `<button type="button" class="custody-choice ${t.id_seguimiento === selected?.id_seguimiento ? 'selected' : ''}" data-custody-action="select" data-id="${t.id_seguimiento}" aria-pressed="${t.id_seguimiento === selected?.id_seguimiento}"><img src="${REAPresentation.photo(t)}" alt="" loading="lazy"><span class="custody-choice-copy"><small>RECOJO #${t.id_seguimiento}</small><strong>${e(t.alimento)}</strong><span>${e(ctx.role === 'organizacion' ? t.origen.nombre : t.destino.nombre)}</span><em><span class="custody-status-dot ${closed(t) ? 'verde' : t.incidencias_abiertas ? 'amarillo' : 'gris'}"></span>${e(t.donacion_estado === 'cancelada' ? 'Cancelado' : names[t.estado])}${t.incidencias_abiertas > 0 ? ` · ${t.incidencias_abiertas} incidencia(s)` : ''}</em></span></button>`).join('') || '<p class="small-muted">No hay recojos que coincidan.</p>';
   }
-  async function select(id){
-    const seq=++loadSequence;
-    const response=await REA.request(`/api/seguimiento/${id}`);
-    if(seq!==loadSequence||currentView!=='seguimiento'||!$('[data-custody-detail]'))return;
-    selected=response.data;plan=selected.plan_actual||null;
-    const recordIndex=records.findIndex(t=>t.id_seguimiento===selected.id_seguimiento);if(recordIndex>=0)records[recordIndex]=selected;
-    renderList($('[data-custody-search]')?.value||'');renderSelected();
-    if(!plan?.ruta || Date.now()-Date.parse(plan.ruta.fecha_calculo)>3600000){
-      try{await calculate(seq);}catch(error){if(seq===loadSequence)routeError(error);}
-    }
+  async function select(id) {
+    const seq = ++loadSequence;
+    const response = await REA.request(`/api/seguimiento/${id}`);
+    if (seq !== loadSequence || currentView !== 'seguimiento' || !$('[data-custody-detail]')) return;
+    selected = response.data;
+    const index = records.findIndex(t => t.id_seguimiento === selected.id_seguimiento); if (index >= 0) records[index] = selected;
+    renderList($('[data-custody-search]')?.value || ''); renderSelected();
   }
-  function renderSelected(){
+  // Botones según quién mira y en qué paso está el recojo.
+  function actions(t) {
+    if (t.donacion_estado === 'cancelada' || t.solicitud_estado !== 'aceptada') return '<p class="small-muted">Este recojo se canceló.</p>';
+    if (closed(t)) return `<p class="small-muted"><i class="fa-solid fa-circle-check"></i> ${t.estado === 'con_problemas' ? 'La beneficiaria registró problemas al recibirlo. Administración revisará la incidencia.' : 'Entrega terminada. ¡Gracias!'}</p>`;
+    const role = ctx.role, before = ['preparacion', 'listo'].includes(t.estado), list = [];
+    if (t.estado === 'preparacion' && ['donante', 'administrador'].includes(role)) list.push(button('<i class="fa-solid fa-box"></i> Marcar como listo', 'step', 'listo', 'btn-primary'));
+    if (t.estado === 'listo' && role !== 'administrador') list.push(button(`<i class="fa-solid fa-handshake"></i> ${role === 'donante' ? 'Ya lo recogieron' : 'Ya lo recogimos'}`, 'step', 'recogido', 'btn-primary'));
+    if (t.estado === 'recogido' && ['organizacion', 'administrador'].includes(role)) list.push(button('<i class="fa-solid fa-check-double"></i> Lo recibimos bien', 'step', 'confirmado', 'btn-primary'), button('<i class="fa-solid fa-triangle-exclamation"></i> Lo recibimos con problemas', 'step', 'con_problemas', 'btn-danger-outline'));
+    if (before) list.push(button(role === 'donante' ? '<i class="fa-solid fa-user-xmark"></i> No vinieron a recoger' : role === 'organizacion' ? '<i class="fa-solid fa-ban"></i> No podremos recogerlo' : '<i class="fa-solid fa-ban"></i> Anular recojo', 'release', t.id_seguimiento, 'btn-danger-outline'));
+    list.push(button('Agregar una nota', 'step', 'observacion'));
+    const waiting = t.estado === 'preparacion' && role === 'organizacion' ? '<p class="small-muted">El donante marcará cuando el alimento esté listo. Puedes coordinar con él por teléfono.</p>' : t.estado === 'recogido' && role === 'donante' ? '<p class="small-muted">La beneficiaria confirmará cuando lo reciba.</p>' : '';
+    return `${waiting}<div class="custody-event-actions">${list.join('')}</div>`;
+  }
+  function renderSelected() {
     REAMaps.dispose($('[data-custody-detail]'));
-    const t=selected,index=stages.indexOf(t.estado),last=t.ultimo_hito;
-    const canceled=t.donacion_estado==='cancelada'||t.solicitud_estado!=='aceptada';
-    const canAdvance=!canceled&&next[t.estado]&&roleStages[ctx.role].includes(next[t.estado]);
-    const destination=t.destino;
-    const noCold=t.requiere_cadena_frio;
-    $('[data-custody-detail]').innerHTML=`<article class="mvp-panel custody-shipment"><div class="custody-shipment-heading"><div><span class="section-kicker">DONACIÓN #${t.id_donacion} · SOLICITUD #${t.id_solicitud}</span><h2>${e(t.alimento)}</h2><p>${n(t.cantidad)} ${e(t.unidad)} · ${e(REAPresentation.profiles[t.perfil_alimento]||'Alimento declarado')}</p></div>${badge(canceled?'Operación cancelada':t.estado,canceled?'cancelada':'')}</div>
-      <div class="custody-stepper" aria-label="Etapas de la cadena de custodia">${stages.map((s,i)=>`<div class="${i<index?'done':i===index?'current':''}"><span>${i<index?'<i class="fa-solid fa-check"></i>':i+1}</span><strong>${e(({preparacion:'Preparación',listo:'Listo',recogido:'Recojo',en_transito:'Traslado',entregado:'Entrega',confirmado:'Confirmación'})[s])}</strong></div>`).join('')}</div>
-      <div class="custody-two-addresses"><div><span class="address-letter origin">A</span><div><small>ESTABLECIMIENTO DONANTE</small><strong>${e(t.origen.nombre)}</strong><p>${e(t.origen.direccion)}</p></div></div><span class="address-connector"><i class="fa-solid fa-arrow-right-long"></i></span><div><span class="address-letter destination">B</span><div><small>BENEFICIARIA RECEPTORA</small><strong>${e(destination.nombre)}</strong><p>${e(destination.direccion)}</p></div></div></div>
-      <div class="map-surface custody-map" id="custody-map"><div class="map-placeholder"><i class="fa-solid fa-route"></i><strong>Consultando el recorrido por carretera</strong></div></div><div class="custody-map-footer"><span data-custody-provider>La ruta se obtiene de un proveedor externo.</span><span><i class="fa-solid fa-location-crosshairs"></i> Sin GPS en vivo</span></div>
-      <form id="custody-route-form" class="custody-planning"><input type="hidden" name="demora_trafico_min" value="0"><input type="hidden" name="margen_seguridad_min" value="15"><input type="hidden" name="preparacion_min" value="${index>=2?0:10}"><input type="hidden" name="recojo_min" value="${index>=2?0:10}"><input type="hidden" name="entrega_min" value="5"><div class="custody-planning-title"><span class="section-kicker">TIEMPO DE LLEGADA</span><h3>¿A qué hora llega a la beneficiaria?</h3><p>Pon la hora en que sale del lugar de recojo (A) y te decimos a qué hora llega (B).</p></div><div class="form-grid"><label>Hora de salida<input class="form-control" type="datetime-local" name="hora_salida" value="${limaInput(new Date())}" required></label></div><button class="btn btn-primary" type="submit"><i class="fa-regular fa-clock"></i> Calcular hora de llegada</button><div class="mvp-message error" data-custody-route-error tabindex="-1" hidden></div></form>
-      <div data-custody-comparison></div><div data-custody-evaluation>${ctx.renderEvaluation(null)}</div></article>
-      <div class="custody-below-grid"><article class="mvp-panel custody-condition"><span class="section-kicker">CONDICIONES DEL LOTE</span><h2>Tiempo y conservación</h2><img src="${REAPresentation.photo(t)}" alt="Fotografía referencial de ${e(t.alimento)}"><span class="photo-referential-label">Imagen referencial · no acredita el lote</span><dl><div><dt>Límite de aprovechamiento declarado</dt><dd>${dt(t.fecha_limite_aprovechamiento_declarada)}</dd></div><div><dt>Conservación informada por el donante</dt><dd>${e(t.conservacion_declarada)}</dd></div><div><dt>Condición del último registro</dt><dd>${e(conditionNames[last?.condicion_declarada]||conditionNames.sin_verificar)}</dd></div><div><dt>Última temperatura registrada</dt><dd>${last?.temperatura_c!=null?`${n(last.temperatura_c)} °C · lectura declarada`:'Sin lectura documentada'}</dd></div><div><dt>Custodio registrado</dt><dd>${e(t.custodio_actual)}</dd></div><div><dt>Último lugar declarado</dt><dd>${e(last?.lugar||t.origen.direccion)}<small>${dt(last?.fecha_evento||t.fecha_actualizacion)} · ${age(last?.fecha_evento||t.fecha_actualizacion)}</small></dd></div></dl><p class="custody-small-note"><i class="fa-solid fa-circle-info"></i> El plazo depende del lote, elaboración y conservación declarados. El semáforo no determina si es comestible ni sustituye una revisión sanitaria.</p></article>
-      <article class="mvp-panel custody-history"><div class="panel-heading"><div><span class="section-kicker">TRAZABILIDAD CON RESPONSABLES</span><h2>Cadena de custodia</h2></div><span class="history-total">${t.hitos.length} hitos</span></div><div class="custody-current-owner"><i class="fa-solid fa-user-shield"></i><span>Custodia registrada<strong>${e(t.custodio_actual)}</strong></span></div><ol class="custody-timeline">${t.hitos.map(h=>`<li><span class="timeline-node"><i class="fa-solid ${h.tipo==='recogido'?'fa-handshake':h.tipo==='en_transito'?'fa-truck-fast':h.tipo==='confirmado'?'fa-check-double':'fa-check'}"></i></span><div><small>${dt(h.fecha_evento)}</small><h3>${e(stepNames[h.tipo])}</h3><p class="timeline-author">${e(h.actor_nombre)} · ${e(h.actor_rol)}</p>${h.responsable_entrega||h.responsable_recibe?`<p class="timeline-transfer"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${e(h.responsable_entrega||'No indicado')} → ${e(h.responsable_recibe||'No indicado')}</p>`:''}<p>${e(h.observacion)}</p><span class="timeline-place"><i class="fa-solid fa-location-dot"></i> ${e(h.lugar)}</span><span class="timeline-condition ${h.condicion_declarada}">${e(conditionNames[h.condicion_declarada])}${h.temperatura_c!=null?` · ${n(h.temperatura_c)} °C declarados`:''}</span>${h.es_demostracion?'<em class="timeline-demo">Escenario académico de demostración</em>':''}</div></li>`).join('')}</ol>
-      <div class="custody-event-actions">${canAdvance?button(`<i class="fa-solid fa-plus"></i> ${e(stepNames[next[t.estado]])}`,'event',t.id_seguimiento,'btn-primary'):!canceled&&t.estado!=='confirmado'?`<p class="small-muted">El siguiente hito corresponde a ${t.estado==='preparacion'?'la preparación del donante':'la beneficiaria o administración'}.</p>`:''}${!canceled&&t.estado!=='confirmado'?button('Registrar observación','observation',t.id_seguimiento):''}${button('<i class="fa-solid fa-triangle-exclamation"></i> Reportar incidencia','incident',t.id_seguimiento,'btn-danger-outline')}</div><p class="custody-small-note">Registros manuales e inmutables. Una corrección se añade como observación; no se reescribe el historial.</p></article></div>
-      <article class="mvp-panel custody-alerts"><div class="panel-heading"><div><span class="section-kicker">ATENCIÓN Y SEGUIMIENTO</span><h2>Incidencias de esta entrega</h2></div>${button('Ver incidencias','incidents')}</div>${t.incidencias.length?t.incidencias.map(incidentCard).join(''):'<div class="custody-no-alert"><i class="fa-solid fa-shield-heart"></i><span>No hay incidencias registradas para esta entrega.</span></div>'}</article>`;
-    restorePlanning(t.ultima_evaluacion?.planificacion);
-    const photoLabel=$('.custody-condition .photo-referential-label');
-    if(t.fotos?.length&&photoLabel){photoLabel.textContent='Fotografía compartida por el donante · requiere revisión del lote';photoLabel.previousElementSibling.alt=`Fotografía compartida por el donante de ${t.alimento}`;}
-    if(plan)displayPlan(plan);
+    const t = selected;
+    // Los pasos cumplidos llevan check; el siguiente queda resaltado.
+    const reached = closed(t) ? 3 : steps.findIndex(([s]) => s === t.estado);
+    const canceled = t.donacion_estado === 'cancelada' || t.solicitud_estado !== 'aceptada';
+    // Cada parte ve el contacto de la otra; administración ve las dos.
+    const donorCard = contactCard('DONANTE', t.origen.nombre, t.origen.responsable, t.origen.telefono, `Recojo en: ${e(t.origen.direccion)}`);
+    const orgCard = contactCard('QUIEN RECOGE', t.destino.nombre, t.destino.responsable, t.destino.telefono, t.tiempo_llegada_min ? `Dijo que tardaría unos ${n(t.tiempo_llegada_min)} min en llegar. Hora propuesta: ${dt(t.fecha_propuesta)}.` : `Hora propuesta: ${dt(t.fecha_propuesta)}.`);
+    const contacts = ctx.role === 'donante' ? orgCard : ctx.role === 'organizacion' ? donorCard : donorCard + orgCard;
+    $('[data-custody-detail]').innerHTML = `<article class="mvp-panel custody-shipment"><div class="custody-shipment-heading"><div><span class="section-kicker">DONACIÓN #${t.id_donacion} · SOLICITUD #${t.id_solicitud}</span><h2>${e(t.alimento)}</h2><p>${n(t.cantidad)} ${e(t.unidad)} · Se puede recoger hasta ${dt(t.fecha_limite_recojo)}</p></div>${badge(canceled ? 'Cancelado' : t.estado, canceled ? 'cancelada' : '')}</div>
+      <div class="custody-stepper simple-stepper" aria-label="Pasos del recojo">${steps.map(([s, label], i) => `<div class="${i <= reached ? 'done' : i === reached + 1 ? 'current' : ''}"><span>${i <= reached ? '<i class="fa-solid fa-check"></i>' : i + 1}</span><strong>${label}</strong></div>`).join('')}</div>
+      ${actions(t)}
+      <div class="contact-grid">${contacts}</div>
+      <div class="map-surface custody-map" id="custody-map"></div><p class="field-hint"><strong>A</strong>: lugar de recojo · <strong>B</strong>: beneficiaria. El mapa solo muestra los puntos; no calcula la ruta.</p></article>
+      <div class="custody-below-grid"><article class="mvp-panel custody-condition"><span class="section-kicker">EL ALIMENTO</span><h2>Cómo se conserva</h2><img src="${REAPresentation.photo(t)}" alt="Foto de ${e(t.alimento)}"><dl><div><dt>Cómo debe guardarse</dt><dd>${e(t.conservacion_declarada || 'No indicado')}</dd></div><div><dt>Envase</dt><dd>${e(t.envase || 'No indicado')}</dd></div><div><dt>Se puede consumir hasta</dt><dd>${dt(t.fecha_limite_aprovechamiento_declarada)}</dd></div><div><dt>Lo tiene ahora</dt><dd>${e(t.custodio_actual)}</dd></div></dl>${t.requiere_cadena_frio ? '<p class="mvp-message warning">Debe mantenerse frío durante el viaje.</p>' : ''}<p class="custody-small-note"><i class="fa-solid fa-circle-info"></i> La información es declarada por el donante. REAlimenta no certifica la inocuidad del alimento.</p></article>
+      <article class="mvp-panel custody-history"><div class="panel-heading"><div><span class="section-kicker">HISTORIAL</span><h2>Lo que pasó</h2></div><span class="history-total">${t.hitos.length} registro(s)</span></div><ol class="custody-timeline">${t.hitos.map(h => `<li><span class="timeline-node"><i class="fa-solid ${h.tipo === 'recogido' ? 'fa-handshake' : h.tipo === 'confirmado' ? 'fa-check-double' : h.tipo === 'con_problemas' ? 'fa-triangle-exclamation' : h.tipo === 'observacion' ? 'fa-comment' : 'fa-check'}"></i></span><div><small>${dt(h.fecha_evento)}</small><h3>${e(stepNames[h.tipo] || h.tipo)}</h3><p class="timeline-author">${e(h.actor_nombre)}</p>${h.responsable_entrega || h.responsable_recibe ? `<p class="timeline-transfer"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${e(h.responsable_entrega || 'No indicado')} → ${e(h.responsable_recibe || 'No indicado')}</p>` : ''}${h.observacion ? `<p>${e(h.observacion)}</p>` : ''}${h.condicion_declarada !== 'sin_verificar' ? `<span class="timeline-condition ${h.condicion_declarada}">${e(conditionNames[h.condicion_declarada])}${h.temperatura_c != null ? ` · ${n(h.temperatura_c)} °C` : ''}</span>` : ''}</div></li>`).join('')}</ol></article></div>
+      <article class="mvp-panel custody-alerts"><div class="panel-heading"><div><span class="section-kicker">PROBLEMAS</span><h2>Incidencias de este recojo</h2></div>${button('<i class="fa-solid fa-triangle-exclamation"></i> Reportar incidencia', 'incident', t.id_seguimiento, 'btn-danger-outline')}</div>${t.incidencias.length ? t.incidencias.map(incidentCard).join('') : '<div class="custody-no-alert"><i class="fa-solid fa-shield-heart"></i><span>No hay incidencias en este recojo.</span></div>'}</article>`;
+    REAMaps.showPlaces($('#custody-map'), { origen: t.origen, destino: t.destino });
   }
-  const limaInput=value=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Lima',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(value).replace(' ','T');
-  // Llegada = hora de salida elegida + duración del camino de A a B.
-  function arrival(result){
-    const route=result?.ruta,form=$('#custody-route-form');
-    if(!route||!form?.hora_salida?.value)return '';
-    const minutes=Math.max(1,Math.round(Number(route.duracion_estimada_min)));
-    const leave=new Date(`${form.hora_salida.value}:00-05:00`),arrive=new Date(leave.getTime()+minutes*60000);
-    const time=value=>new Intl.DateTimeFormat('es-PE',{timeZone:'America/Lima',hour:'numeric',minute:'2-digit',hour12:true}).format(value);
-    return `<div class="eta-result eta-ok"><small>LLEGARÍA A LAS</small><strong>${time(arrive)}</strong><p><i class="fa-solid fa-car-side"></i> ${minutes} min de viaje · ${n(route.distancia_km)} km</p><p class="field-hint">Tiempo aproximado en auto, sin contar el tráfico.</p></div>`;
+  function stepDialog(type) {
+    const t = selected;
+    const titles = { listo: 'Marcar como listo', recogido: 'Registrar el recojo', confirmado: 'Confirmar que lo recibieron', con_problemas: 'Recibido con problemas', observacion: 'Agregar una nota' };
+    const intro = { listo: 'Avisaremos a la beneficiaria que ya puede pasar a recoger.', recogido: 'Confirma quién entregó y quién se llevó el alimento.', confirmado: 'Confirmas que el alimento llegó a tu entidad. Avisaremos al donante.', con_problemas: 'Cuéntanos qué pasó. Se creará una incidencia para que administración la revise y avisaremos al donante.', observacion: 'La nota queda en el historial con tu nombre y la hora.' }[type];
+    const people = type === 'recogido' ? `<label>¿Quién entregó?<input class="form-control" name="responsable_entrega" value="${e(t.origen.responsable || t.origen.nombre)}" maxlength="150"></label><label>¿Quién lo recogió?<input class="form-control" name="responsable_recibe" value="${e(t.responsable_recojo)}" maxlength="150"></label>` : '';
+    const condition = ['recogido', 'observacion'].includes(type) ? `<label class="full">¿Cómo está el alimento?<select class="form-control" name="condicion_declarada"><option value="sin_verificar">No lo revisé</option><option value="sin_novedad">Está bien</option><option value="requiere_revision">Hay algo que revisar</option><option value="no_conforme">Está en mal estado (se reportará un problema)</option></select></label>` : '';
+    const noteRequired = ['con_problemas', 'observacion'].includes(type);
+    ctx.openDialog(titles[type], `<form id="custody-event-form" data-type="${type}" data-id="${t.id_seguimiento}" data-version="${t.version}"><p class="dialog-intro">${intro}</p><div class="form-grid">${people}${condition}<label class="full">${type === 'con_problemas' ? '¿Qué problema hubo?' : 'Nota (opcional)'}<textarea class="form-control" name="observacion" ${noteRequired ? `required minlength="${type === 'con_problemas' ? 10 : 5}"` : ''} maxlength="2500" placeholder="${type === 'con_problemas' ? 'Ej. Faltaban dos bolsas y una caja llegó abierta.' : 'Ej. Se entregaron 3 cajas cerradas.'}"></textarea></label></div><div class="mvp-message error" data-custody-form-error tabindex="-1" hidden></div><div class="dialog-actions">${button('Volver', 'close')}<button class="btn ${type === 'con_problemas' ? 'btn-danger' : 'btn-primary'}" type="submit">${titles[type]}</button></div></form>`);
   }
-  function restorePlanning(settings){
-    const form=$('#custody-route-form');if(!form||!settings)return;
-    for(const key of ['preparacion_min','recojo_min','entrega_min','margen_seguridad_min','demora_trafico_min']){
-      const field=form.elements.namedItem(key);if(!field||settings[key]==null)continue;
-      if(field.tagName==='SELECT'&&![...field.options].some(option=>option.value===String(settings[key]))){const option=document.createElement('option');option.value=String(settings[key]);option.textContent=`Personalizado · +${n(settings[key])} min`;field.append(option);}
-      field.value=String(settings[key]);
-    }
-    if(form.dispone_cadena_frio&&typeof settings.dispone_cadena_frio==='boolean')form.dispone_cadena_frio.checked=settings.dispone_cadena_frio;
+  function releaseDialog() {
+    const role = ctx.role;
+    const intro = role === 'donante' ? 'Registra que nadie vino a recoger. La solicitud se cancelará y, si aún hay tiempo, tu donación volverá a publicarse para otras beneficiarias.' : role === 'organizacion' ? 'Avisa al donante que no podrán recogerlo. Tu solicitud se cancelará y la donación volverá a publicarse para otras beneficiarias.' : 'El recojo se anulará y la donación volverá a publicarse si su plazo sigue vigente. Se avisará a las dos partes.';
+    ctx.openDialog(role === 'donante' ? 'No vinieron a recoger' : role === 'organizacion' ? 'No podremos recogerlo' : 'Anular recojo', `<form id="custody-release-form" data-id="${selected.id_seguimiento}"><p class="dialog-intro">${intro}</p><label>¿Por qué?<textarea class="form-control" name="motivo" required minlength="5" maxlength="1000" placeholder="${role === 'donante' ? 'Ej. Esperamos hasta las 6 p. m. y nadie vino.' : 'Ej. Se malogró nuestra movilidad.'}"></textarea></label><div class="mvp-message error" data-custody-form-error tabindex="-1" hidden></div><div class="dialog-actions">${button('Volver', 'close')}<button class="btn btn-danger" type="submit">Confirmar</button></div></form>`);
   }
-  function displayPlan(result){
-    plan=result;
-    selected.plan_actual=result;
-    $('[data-custody-evaluation]').innerHTML=ctx.renderEvaluation(result);
-    $('[data-custody-comparison]').innerHTML=arrival(result);
-    restorePlanning(result.evaluacion);
-    renderList($('[data-custody-search]')?.value||'');
-    if(result.ruta?.geometry)REAMaps.showRoute($('#custody-map'),{...result.ruta,origen:{...result.ruta.origen,...selected.origen},destino:{...result.ruta.destino,...selected.destino},estado_viabilidad:result.evaluacion?.estado_viabilidad});
-    $('[data-custody-provider]').textContent=result.ruta?`${result.ruta.proveedor} · cálculo ${dt(result.ruta.fecha_calculo)} · recorrido planificado completo`:'Sin ruta disponible';
-    const e=result.evaluacion;
-    const stamp=document.createElement('p');stamp.className='custody-refresh-stamp';stamp.textContent=`Evaluación temporal: ${dt(e?.fecha_calculo)} · se actualiza cada minuto mientras esta pantalla esté visible.`;$('[data-custody-evaluation]').append(stamp);
+  function incidentDialog(id) {
+    const options = records.filter(t => !['cancelada'].includes(t.donacion_estado)).map(t => `<option value="${t.id_seguimiento}" ${Number(id) === t.id_seguimiento ? 'selected' : ''}>#${t.id_seguimiento} · ${e(t.alimento)}</option>`).join('');
+    ctx.openDialog('Reportar incidencia', `<form id="custody-incident-form"><p class="dialog-intro">Cuéntanos qué pasó. Lo verán el donante, la beneficiaria y administración.</p><label>¿En qué recojo?<select class="form-control" name="id_seguimiento" required>${options}</select></label><div class="form-grid"><label>¿Qué tipo de problema?<select class="form-control" name="tipo"><option value="demora">Llegó tarde o hubo retraso</option><option value="temperatura">No se mantuvo frío o caliente</option><option value="envase">Envase roto o abierto</option><option value="calidad">El alimento está en mal estado</option><option value="otro">Otro</option></select></label><label>¿Qué tan grave es?<select class="form-control" name="severidad"><option value="media">Importante, hay que revisarlo</option><option value="alta">Grave, hay que parar la entrega</option><option value="baja">Leve, solo para que quede anotado</option></select></label><label class="full">Resúmelo en una frase<input class="form-control" name="titulo" minlength="5" maxlength="180" required placeholder="Ej. Una caja llegó abierta"></label><label class="full">Cuéntanos qué pasó<textarea class="form-control" name="descripcion" minlength="10" maxlength="2500" required placeholder="¿Qué viste? ¿Cuándo pasó? ¿Qué hicieron?"></textarea></label></div><div class="mvp-message error" data-custody-form-error tabindex="-1" hidden></div><div class="dialog-actions">${button('Volver', 'close')}<button class="btn btn-primary" type="submit">Enviar reporte</button></div></form>`);
   }
-  function routeError(error){const el=$('[data-custody-route-error]');if(el){el.textContent=error.message;el.hidden=false;}if(!plan?.ruta){$('[data-custody-provider]').textContent='Proveedor no disponible. No se muestran tiempos inventados.';$('#custody-map').innerHTML='<div class="map-placeholder"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo consultar la ruta</strong><span>Puedes volver a intentarlo.</span></div>';}}
-  async function calculate(seq=loadSequence){
-    const form=$('#custody-route-form');if(!form)return;
-    const t=selected;
-    const body=Object.fromEntries(['preparacion_min','recojo_min','entrega_min','margen_seguridad_min','demora_trafico_min'].map(k=>[k,Number(form.elements.namedItem(k).value)]));
-    if(form.dispone_cadena_frio)body.dispone_cadena_frio=form.dispone_cadena_frio.checked;
-    const result=await REA.request(`/api/seguimiento/${t.id_seguimiento}/evaluacion`,{method:'POST',body});
-    if(seq===loadSequence&&selected===t&&$('[data-custody-evaluation]'))displayPlan(result.data);
+  function incidentCard(i) {
+    return `<article class="custody-incident-card severity-${e(i.severidad)}"><div class="incident-icon"><i class="fa-solid ${i.estado === 'resuelta' ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i></div><div class="incident-content"><div class="incident-title-row"><span class="section-kicker">INCIDENCIA #${i.id_incidencia} · ${e(i.tipo)} · ${e(i.severidad)}</span><span class="custody-badge ${i.estado}">${i.estado === 'resuelta' ? 'Resuelta' : 'Abierta'}</span></div><h3>${e(i.titulo)}</h3>${i.alimento ? `<strong class="incident-food">${e(i.alimento)} · ${e(i.origen?.nombre || '')}${i.destino?.nombre ? ` → ${e(i.destino.nombre)}` : ''}</strong>` : ''}<p>${e(i.descripcion)}</p><small>${dt(i.fecha_creacion)} · ${e(i.actor_nombre)}</small>${i.resolucion ? `<div class="incident-resolution"><strong>Cómo se resolvió</strong><p>${e(i.resolucion)}</p><small>${e(i.resuelto_por)} · ${dt(i.fecha_resolucion)}</small></div>` : ''}<div class="incident-actions">${currentView === 'incidencias' && i.id_seguimiento ? button('Ver recojo', 'open-tracking', i.id_seguimiento) : ''}${i.estado === 'abierta' && ctx.role === 'administrador' ? button('Registrar solución', 'resolve', i.id_incidencia, 'btn-primary') : ''}</div></div></article>`;
   }
-  function eventDialog(observation=false){
-    const t=selected,type=observation?'observacion':next[t.estado];
-    const transfer=['recogido','entregado','confirmado'].includes(type);
-    const destination=['entregado','confirmado'].includes(type);
-    ctx.openDialog(stepNames[type],`<form id="custody-event-form" data-type="${type}" data-id="${t.id_seguimiento}" data-version="${t.version}"><p class="dialog-intro">Se guardará con tu nombre y la hora actual. Anota solo lo que viste tú mismo.</p><div class="form-grid">${transfer?`<label>¿Quién entrega?<input class="form-control" name="responsable_entrega" value="${e(t.custodio_actual)}" required maxlength="150"></label><label>¿Quién recibe?<input class="form-control" name="responsable_recibe" value="${e(destination?t.destino.nombre:t.responsable_recojo)}" required maxlength="150"></label>`:''}<label class="full">¿Dónde ocurre?<input class="form-control" name="lugar" value="${e(destination?t.destino.direccion:t.ultimo_hito?.lugar||t.origen.direccion)}" required maxlength="300"></label><label>¿Cómo está el alimento?<select class="form-control" name="condicion_declarada" required><option value="sin_verificar">No lo revisé</option><option value="sin_novedad">Está bien</option><option value="requiere_revision">Hay algo que revisar</option><option value="no_conforme">Está en mal estado (se reportará un problema)</option></select></label><label>Temperatura en °C (opcional)<input class="form-control" name="temperatura_c" type="number" step="0.1" min="-80" max="120" placeholder="Solo si tienes termómetro"></label>${t.requiere_cadena_frio?'<label class="full">¿Se mantiene frío?<select class="form-control" name="conserva_frio"><option value="">No lo sé</option><option value="true">Sí, va en cooler o refrigerado</option><option value="false">No, no hay cómo mantenerlo frío</option></select></label>':''}<label class="full">¿Qué observaste?<textarea class="form-control" name="observacion" minlength="5" maxlength="2500" required placeholder="Ej. Se entregaron 3 cajas cerradas, en buen estado."></textarea></label></div>${type==='confirmado'?'<p class="mvp-message warning">Confirmas que recibiste el alimento. Si hay un problema grave sin resolver, no podrás confirmar.</p>':''}<div class="mvp-message error" data-custody-form-error tabindex="-1" hidden></div><div class="dialog-actions">${button('Volver','close')}<button class="btn btn-primary" type="submit">Guardar</button></div></form>`);
+  async function renderIncidents() {
+    const list = (await REA.request('/api/incidencias')).data;
+    ctx.setContent(`${ctx.heading('Incidencias', 'Problemas reportados en los recojos y entregas, y cómo se resolvieron.', records.some(t => !closed(t)) ? button('<i class="fa-solid fa-plus"></i> Reportar incidencia', 'incident', '', 'btn-primary') : '')}
+      <div class="custody-overview"><article><span class="custody-overview-icon amber"><i class="fa-solid fa-triangle-exclamation"></i></span><div><strong>${list.filter(i => i.estado === 'abierta').length}</strong><span>abiertas</span></div></article><article><span class="custody-overview-icon red"><i class="fa-solid fa-shield"></i></span><div><strong>${list.filter(i => i.estado === 'abierta' && i.severidad === 'alta').length}</strong><span>graves</span></div></article><article><span class="custody-overview-icon"><i class="fa-solid fa-check-double"></i></span><div><strong>${list.filter(i => i.estado === 'resuelta').length}</strong><span>resueltas</span></div></article></div>
+      <section class="mvp-panel incident-board"><div class="mvp-request-tabs"><button type="button" class="active" data-incident-filter="todos">Todas</button><button type="button" data-incident-filter="abierta">Abiertas</button><button type="button" data-incident-filter="resuelta">Resueltas</button></div><div data-incident-list></div><p class="custody-small-note">Resolver una incidencia no certifica que el alimento sea apto para el consumo.</p></section>`, 'Incidencias');
+    const paint = () => { $('[data-incident-list]').innerHTML = list.filter(i => filter === 'todos' || i.estado === filter).map(incidentCard).join('') || '<div class="custody-no-alert"><i class="fa-solid fa-shield-heart"></i><span>No hay incidencias en esta vista.</span></div>'; };
+    filter = 'todos'; paint();
+    ctx.main.querySelectorAll('[data-incident-filter]').forEach(el => el.addEventListener('click', () => { filter = el.dataset.incidentFilter; ctx.main.querySelectorAll('[data-incident-filter]').forEach(b => b.classList.toggle('active', b === el)); paint(); }));
   }
-  function incidentDialog(id){
-    const options=records.map(t=>`<option value="${t.id_seguimiento}" ${Number(id)===t.id_seguimiento?'selected':''}>#${t.id_seguimiento} · ${e(t.alimento)}</option>`).join('');
-    ctx.openDialog('Reportar incidencia',`<form id="custody-incident-form"><p class="dialog-intro">Cuéntanos qué pasó. Lo verán el donante, la beneficiaria y el administrador.</p><label>¿En qué entrega?<select class="form-control" name="id_seguimiento" required>${options}</select></label><div class="form-grid"><label>¿Qué tipo de problema?<select class="form-control" name="tipo"><option value="demora">Llegó tarde o hubo retraso</option><option value="temperatura">No se mantuvo frío o caliente</option><option value="envase">Envase roto o abierto</option><option value="calidad">El alimento está en mal estado</option><option value="otro">Otro</option></select></label><label>¿Qué tan grave es?<select class="form-control" name="severidad"><option value="media">Importante, hay que revisarlo</option><option value="alta">Grave, hay que parar la entrega</option><option value="baja">Leve, solo para que quede anotado</option></select></label><label class="full">Resúmelo en una frase<input class="form-control" name="titulo" minlength="5" maxlength="180" required placeholder="Ej. Una caja llegó abierta"></label><label class="full">Cuéntanos qué pasó<textarea class="form-control" name="descripcion" minlength="10" maxlength="2500" required placeholder="¿Qué viste? ¿Cuándo pasó? ¿Qué hicieron?"></textarea></label></div><div class="mvp-message error" data-custody-form-error tabindex="-1" hidden></div><div class="dialog-actions">${button('Volver','close')}<button class="btn btn-primary" type="submit">Enviar reporte</button></div></form>`);
-  }
-  function incidentCard(i){
-    return `<article class="custody-incident-card severity-${e(i.severidad)}"><div class="incident-icon"><i class="fa-solid ${i.estado==='resuelta'?'fa-circle-check':'fa-triangle-exclamation'}"></i></div><div class="incident-content"><div class="incident-title-row"><span class="section-kicker">INCIDENCIA #${i.id_incidencia} · ${e(i.tipo)} · ${e(i.severidad)}</span><span class="custody-badge ${i.estado}">${i.estado==='resuelta'?'Resuelta':'Abierta'}</span></div><h3>${e(i.titulo)}</h3>${i.alimento?`<strong class="incident-food">${e(i.alimento)}</strong>`:''}<p>${e(i.descripcion)}</p><small>${dt(i.fecha_creacion)} · ${e(i.actor_nombre)}</small>${i.resolucion?`<div class="incident-resolution"><strong>Resolución registrada</strong><p>${e(i.resolucion)}</p><small>${e(i.resuelto_por)} · ${dt(i.fecha_resolucion)}</small></div>`:''}<div class="incident-actions">${currentView==='incidencias'?button('Abrir seguimiento','open-tracking',i.id_seguimiento):''}${i.estado==='abierta'&&ctx.role==='administrador'?button('Registrar resolución','resolve',i.id_incidencia,'btn-primary'):''}</div></div></article>`;
-  }
-  async function renderIncidents(){
-    const response=await REA.request('/api/incidencias');const list=response.data;
-    ctx.setContent(`${ctx.heading('Lo importante no pasa desapercibido.','Incidencias vinculadas a cada entrega, con responsable, prioridad y resolución.',records.length?button('<i class="fa-solid fa-plus"></i> Reportar incidencia','incident','','btn-primary'):'')}
-      <div class="custody-overview"><article><span class="custody-overview-icon amber"><i class="fa-solid fa-triangle-exclamation"></i></span><div><strong>${list.filter(i=>i.estado==='abierta').length}</strong><span>incidencias abiertas</span></div></article><article><span class="custody-overview-icon red"><i class="fa-solid fa-shield"></i></span><div><strong>${list.filter(i=>i.estado==='abierta'&&i.severidad==='alta').length}</strong><span>prioridad alta</span></div></article><article><span class="custody-overview-icon"><i class="fa-solid fa-check-double"></i></span><div><strong>${list.filter(i=>i.estado==='resuelta').length}</strong><span>resoluciones registradas</span></div></article></div>
-      <section class="mvp-panel incident-board"><div class="mvp-request-tabs"><button type="button" class="active" data-incident-filter="todos">Todas</button><button type="button" data-incident-filter="abierta">Abiertas</button><button type="button" data-incident-filter="resuelta">Resueltas</button></div><div data-incident-list></div><p class="custody-small-note">Resolver una incidencia no certifica inocuidad. Se conserva la descripción original y la decisión administrativa.</p></section>`,'Incidencias y revisión');
-    const paint=()=>{$('[data-incident-list]').innerHTML=list.filter(i=>filter==='todos'||i.estado===filter).map(incidentCard).join('')||'<div class="custody-no-alert"><i class="fa-solid fa-shield-heart"></i><span>No hay incidencias en esta vista.</span></div>';};filter='todos';paint();
-    ctx.main.querySelectorAll('[data-incident-filter]').forEach(el=>el.addEventListener('click',()=>{filter=el.dataset.incidentFilter;ctx.main.querySelectorAll('[data-incident-filter]').forEach(b=>b.classList.toggle('active',b===el));paint();}));
-  }
-  document.addEventListener('input',event=>{if(ctx&&event.target.matches('[data-custody-search]'))renderList(event.target.value);});
-  document.addEventListener('click',async event=>{
-    const el=event.target.closest('[data-custody-action]');if(!el||!ctx)return;
-    const a=el.dataset.custodyAction;el.disabled=true;
-    try{
-      if(a==='select')await select(Number(el.dataset.id));
-      else if(a==='refresh')await render(currentView);
-      else if(a==='event')eventDialog();
-      else if(a==='observation')eventDialog(true);
-      else if(a==='incident')incidentDialog(el.dataset.id||selected?.id_seguimiento||records[0]?.id_seguimiento);
-      else if(a==='close')ctx.closeDialog();
-      else if(a==='incidents')ctx.main.closest('body')?.querySelector('[data-view="incidencias"]')?.click();
-      else if(a==='open-tracking'){const id=Number(el.dataset.id);selected=records.find(t=>t.id_seguimiento===id);ctx.main.closest('body')?.querySelector('[data-view="seguimiento"]')?.click();}
-      else if(a==='resolve')ctx.openDialog('Registrar resolución',`<form id="custody-resolution-form" data-id="${Number(el.dataset.id)}"><p class="dialog-intro">Cuenta qué se hizo para solucionar el problema y quién lo hizo.</p><label>¿Cómo se solucionó?<textarea class="form-control" name="resolucion" required minlength="10" maxlength="2500" placeholder="Ej. Se revisó la caja y se reemplazó. Lo hizo Juan Pérez."></textarea></label><div class="mvp-message error" data-custody-form-error tabindex="-1" hidden></div><div class="dialog-actions">${button('Volver','close')}<button class="btn btn-primary" type="submit">Guardar solución</button></div></form>`);
-    }catch(error){ctx.toast(error.message);}finally{el.disabled=false;}
+  document.addEventListener('input', event => { if (ctx && event.target.matches('[data-custody-search]')) renderList(event.target.value); });
+  document.addEventListener('click', async event => {
+    const el = event.target.closest('[data-custody-action]'); if (!el || !ctx) return;
+    const a = el.dataset.custodyAction; el.disabled = true;
+    try {
+      if (a === 'select') await select(Number(el.dataset.id));
+      else if (a === 'refresh') await render(currentView);
+      else if (a === 'step') stepDialog(el.dataset.id);
+      else if (a === 'release') releaseDialog();
+      else if (a === 'incident') incidentDialog(el.dataset.id || selected?.id_seguimiento || records[0]?.id_seguimiento);
+      else if (a === 'close') ctx.closeDialog();
+      else if (a === 'open-tracking') { selected = { id_seguimiento: Number(el.dataset.id) }; ctx.main.closest('body')?.querySelector('.sidebar-nav [data-view="seguimiento"]')?.click(); }
+      else if (a === 'resolve') ctx.openDialog('Registrar solución', `<form id="custody-resolution-form" data-id="${Number(el.dataset.id)}"><p class="dialog-intro">Cuenta qué se hizo para solucionar el problema. Avisaremos al donante y a la beneficiaria.</p><label>¿Cómo se solucionó?<textarea class="form-control" name="resolucion" required minlength="10" maxlength="2500" placeholder="Ej. Se revisó la caja y el donante repuso el alimento."></textarea></label><div class="mvp-message error" data-custody-form-error tabindex="-1" hidden></div><div class="dialog-actions">${button('Volver', 'close')}<button class="btn btn-primary" type="submit">Guardar solución</button></div></form>`);
+    } catch (error) { ctx.toast(error.message); } finally { el.disabled = false; }
   });
-  document.addEventListener('submit',async event=>{
-    const form=event.target;if(!ctx||!['custody-route-form','custody-event-form','custody-incident-form','custody-resolution-form'].includes(form.id))return;
-    event.preventDefault();if(!form.reportValidity())return;
-    const submit=form.querySelector('[type="submit"]'),original=submit.innerHTML;submit.disabled=true;submit.innerHTML='<span class="loading-spinner small"></span> Guardando…';
-    const errorEl=form.querySelector('[data-custody-form-error],[data-custody-route-error]');if(errorEl)errorEl.hidden=true;
-    try{
-      if(form.id==='custody-route-form'){await calculate();return;}
-      const body=Object.fromEntries(new FormData(form));
-      if(form.id==='custody-event-form'){
-        body.tipo=form.dataset.type;body.version=Number(form.dataset.version);body.temperatura_c=body.temperatura_c===''?null:Number(body.temperatura_c);
-        body.conserva_frio=body.conserva_frio==null||body.conserva_frio===''?null:body.conserva_frio==='true';
-        await REA.request(`/api/seguimiento/${Number(form.dataset.id)}/hitos`,{method:'POST',body});ctx.closeDialog();await select(Number(form.dataset.id));ctx.toast('Hito guardado con responsable y hora del servidor.');
-      } else if(form.id==='custody-incident-form'){
-        await REA.request(`/api/seguimiento/${Number(body.id_seguimiento)}/incidencias`,{method:'POST',body});ctx.closeDialog();await render(currentView);ctx.toast('Incidencia registrada y visible para administración.');
-      }else{
-        await REA.request(`/api/incidencias/${Number(form.dataset.id)}/resolver`,{method:'POST',body});ctx.closeDialog();await render(currentView);ctx.toast('Resolución conservada en el historial.');
+  document.addEventListener('submit', async event => {
+    const form = event.target; if (!ctx || !['custody-event-form', 'custody-release-form', 'custody-incident-form', 'custody-resolution-form'].includes(form.id)) return;
+    event.preventDefault(); if (!form.reportValidity()) return;
+    const submit = form.querySelector('[type="submit"]'), original = submit.innerHTML; submit.disabled = true; submit.innerHTML = '<span class="loading-spinner small"></span> Guardando…';
+    const errorEl = form.querySelector('[data-custody-form-error]'); if (errorEl) errorEl.hidden = true;
+    try {
+      const body = Object.fromEntries(new FormData(form));
+      if (form.id === 'custody-event-form') {
+        body.tipo = form.dataset.type; body.version = Number(form.dataset.version);
+        await REA.request(`/api/seguimiento/${Number(form.dataset.id)}/hitos`, { method: 'POST', body });
+        ctx.closeDialog(); await select(Number(form.dataset.id)); ctx.toast(body.tipo === 'observacion' ? 'Nota guardada.' : 'Listo. Avisamos a la otra parte.');
+      } else if (form.id === 'custody-release-form') {
+        const result = await REA.request(`/api/seguimiento/${Number(form.dataset.id)}/anular`, { method: 'POST', body });
+        ctx.closeDialog(); selected = null; await ctx.reload?.(); await render('seguimiento');
+        ctx.toast(result.data.reabierta ? 'Recojo anulado. La donación volvió a publicarse y avisamos a la otra parte.' : 'Recojo anulado. El plazo de la donación ya había terminado.');
+      } else if (form.id === 'custody-incident-form') {
+        await REA.request(`/api/seguimiento/${Number(body.id_seguimiento)}/incidencias`, { method: 'POST', body }); ctx.closeDialog(); await render(currentView); ctx.toast('Incidencia registrada. Administración la revisará.');
+      } else {
+        await REA.request(`/api/incidencias/${Number(form.dataset.id)}/resolver`, { method: 'POST', body }); ctx.closeDialog(); await render(currentView); ctx.toast('Solución guardada y comunicada a las dos partes.');
       }
-    }catch(error){if(form.id==='custody-route-form')routeError(error);else if(errorEl){errorEl.textContent=error.message;errorEl.hidden=false;errorEl.focus();}}
-    finally{submit.disabled=false;submit.innerHTML=original;}
+    } catch (error) { if (errorEl) { errorEl.textContent = error.message; errorEl.hidden = false; errorEl.focus(); } }
+    finally { submit.disabled = false; submit.innerHTML = original; }
   });
-  window.REACustody={configure(value){ctx=value;},render,setTarget(id){selected={id_seguimiento:Number(id)};},open(id){selected={id_seguimiento:Number(id)};document.querySelector('.sidebar-nav [data-view="seguimiento"]')?.click();}};
-  setInterval(()=>{if(ctx&&!document.hidden&&currentView==='seguimiento'&&selected&&$('#custody-route-form')&&!document.querySelector('#app-dialog[open]')&&!$('#custody-route-form button[type="submit"]').disabled)void calculate().catch(routeError);},60000);
+  window.REACustody = { configure(value) { ctx = value; }, render, current: () => currentView, setTarget(id) { selected = { id_seguimiento: Number(id) }; }, open(id) { selected = { id_seguimiento: Number(id) }; document.querySelector('.sidebar-nav [data-view="seguimiento"]')?.click(); } };
 })();

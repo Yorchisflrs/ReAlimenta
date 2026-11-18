@@ -36,5 +36,13 @@
     if(!response.ok){const error=new Error(data.error?.message||'No se pudo subir la fotografía.');error.status=response.status;error.code=data.error?.code;throw error;}
     return data;
   }
-  window.REA = { request, me, uploadPhoto, get user() { return session; }, destination(role) { return ({ donante: 'donante.html', organizacion: 'organizacion.html', administrador: 'administrador.html' })[role] || 'login.html'; } };
+  // Sube un archivo tal cual (PDF o imagen) a una ruta que lo recibe en crudo, con el token de la sesión.
+  async function uploadFile(path, file) {
+    const type = file.type === 'image/jpg' ? 'image/jpeg' : file.type;
+    const response = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json', 'Content-Type': type || 'application/octet-stream', 'x-csrf-token': csrfToken, 'x-file-name': encodeURIComponent(file.name) }, body: file });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) { const error = new Error(data.error?.message || `No se pudo subir "${file.name}".`); error.status = response.status; throw error; }
+    return data;
+  }
+  window.REA = { request, me, uploadPhoto, uploadFile, get user() { return session; }, destination(role) { return ({ donante: 'donante.html', organizacion: 'organizacion.html', administrador: 'administrador.html' })[role] || 'login.html'; } };
 })();

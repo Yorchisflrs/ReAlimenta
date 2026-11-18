@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
-import http from 'node:http';
 import { promisify } from 'node:util';
 import { startSandbox, SANDBOX_DATABASE } from './helpers/mysql-sandbox.mjs';
 
@@ -32,7 +31,7 @@ async function login(name) {
   return { cookie: result.response.headers.get('set-cookie').split(';')[0], csrfToken: result.data.csrfToken, user: result.data.user };
 }
 function donation(overrides = {}) {
-  return { alimento: 'Pan integral de prueba', categoria: 'Panadería y complementos', cantidad: 30, unidad: 'unidades', descripcion: 'Registro de prueba automatizada en base aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público de prueba en Puno', distrito: 'Puno', latitud_recojo: -15.8402, longitud_recojo: -70.0278, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba', ...overrides };
+  return { alimento: 'Pan integral de prueba', categoria: 'Panadería y complementos', cantidad: 30, unidad: 'unidades', descripcion: 'Registro de prueba automatizada en base aislada.', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 4 * 3600000).toISOString(), fecha_limite_aprovechamiento_declarada: new Date(Date.now() + 7 * 3600000).toISOString(), direccion_recojo: 'Punto público de prueba en Puno', distrito: 'Puno', latitud_recojo: -15.8402, longitud_recojo: -70.0278, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Caja de prueba', declaracion_buen_estado: true, ...overrides };
 }
 async function createDonation(overrides = {}) {
   const result = await call('POST', '/api/donaciones', donation(overrides), accounts.donante);
@@ -78,64 +77,8 @@ test('API y MySQL responden con fecha del servidor; prueba de conexión de desar
   const check = await call('GET', '/api/dev/conexion');
   assert.equal(check.status, 200);
   assert.equal(check.data.data.message, 'Conexión a MySQL establecida correctamente');
-  assert.equal(check.data.data.tablas_encontradas, 13);
+  assert.equal(check.data.data.tablas_encontradas, 16);
   assert.doesNotMatch(JSON.stringify(check.data), /password|contrase|root|MariaDB|10\.4/i);
-});
-
-test('Rutas: ida y traslado por separado, planificación persistente y nueva ubicación invalida ruta anterior', async () => {
-  const previousProvider=process.env.ROUTING_PROVIDER, previousUrl=process.env.OSRM_URL;
-  const calls=[];
-  const provider=http.createServer((req,res)=>{
-    const points=req.url.split('/driving/')[1].split('?')[0].split(';').map(pair=>pair.split(',').map(Number));
-    calls.push(points);
-    const outbound=Math.abs(points[0][0]+70.0278)<0.000001;
-    res.setHeader('Content-Type','application/json');
-    res.end(JSON.stringify({code:'Ok',routes:[{distance:outbound?7100:8050,duration:(outbound?20:25)*60,geometry:{type:'LineString',coordinates:[points[0],[(points[0][0]+points[1][0])/2,(points[0][1]+points[1][1])/2],points[1]]}}]}));
-  });
-  await new Promise(resolve=>provider.listen(0,'127.0.0.1',resolve));
-  process.env.ROUTING_PROVIDER='osrm';process.env.OSRM_URL=`http://127.0.0.1:${provider.address().port}`;
-  const original=await one('SELECT latitud,longitud FROM organizaciones WHERE id_organizacion = ?',[accounts.organizacion.user.perfil.id_organizacion]);
-  try{
-    const {d,delivery}=await accepted();
-    const routePath=`/api/seguimiento/${delivery.id_entrega}`;
-    const result=await call('POST',`${routePath}/evaluacion`,{preparacion_min:7,recojo_min:9,entrega_min:4,margen_seguridad_min:17,demora_trafico_min:45,viaje_recojo_min:9999,etapa_custodia:'confirmado'},accounts.organizacion);
-    assert.equal(result.status,200,JSON.stringify(result.data));
-    const plan=result.data.data;
-    assert.equal(plan.ruta.distancia_km,7.1);assert.equal(plan.ruta_recojo.distancia_km,8.05);
-    assert.equal(plan.evaluacion.viaje_recojo_min,25);
-    assert.equal(plan.evaluacion.demora_trafico_min,45);
-    assert.ok(plan.evaluacion.tiempo_total_estimado_min>=127);
-    assert.equal(calls.length,2);
-    const saved=await one('SELECT * FROM evaluaciones_ruta WHERE id_solicitud = ? ORDER BY id_evaluacion DESC LIMIT 1',[delivery.id_solicitud]);
-    const audit=await one("SELECT descripcion FROM auditoria WHERE tabla_afectada='evaluaciones_ruta' AND id_registro=? AND accion='calcular'",[saved.id_evaluacion]);
-    assert.equal(JSON.parse(audit.descripcion).planificacion.demora_trafico_min,45);
-    const reopened=(await call('GET',routePath,undefined,accounts.organizacion)).data.data;
-    assert.equal(reopened.plan_actual.evaluacion.demora_trafico_min,45);
-    assert.equal(reopened.plan_actual.evaluacion.margen_seguridad_min,17);
-    assert.equal(reopened.plan_actual.ruta_recojo.duracion_estimada_min,25);
-    const detail=(await call('GET',`/api/donaciones/${d.id_donacion}`,undefined,accounts.organizacion)).data.data;
-    assert.equal(detail.plan_ruta.evaluacion.demora_trafico_min,45);
-    const common={lugar:'Ubicación de prueba aislada',condicion_declarada:'sin_novedad',observacion:'Verificación manual exclusiva de la prueba.',responsable_entrega:'Donante de prueba',responsable_recibe:'Recolector de prueba'};
-    assert.equal((await call('POST',`${routePath}/hitos`,{...common,tipo:'listo',version:reopened.version},accounts.donante)).status,201);
-    assert.equal((await call('POST',`${routePath}/hitos`,{...common,tipo:'recogido',version:reopened.version+1},accounts.organizacion)).status,201);
-    const moved=(await call('POST',`${routePath}/evaluacion`,{preparacion_min:400,recojo_min:300,viaje_recojo_min:9999},accounts.organizacion)).data.data;
-    assert.equal(moved.ruta_recojo,null);assert.equal(moved.evaluacion.viaje_recojo_min,0);
-    assert.equal(moved.evaluacion.preparacion_min,0);assert.equal(moved.evaluacion.recojo_min,0);
-    assert.equal(moved.evaluacion.demora_trafico_min,45);
-    assert.equal(calls.length,2);
-    const detailPlan=(await call('POST',`/api/donaciones/${d.id_donacion}/evaluacion`,{preparacion_min:400,recojo_min:300},accounts.organizacion)).data.data;
-    assert.equal(detailPlan.ruta_recojo,null);assert.equal(detailPlan.evaluacion.preparacion_min,0);assert.equal(detailPlan.evaluacion.recojo_min,0);
-    assert.equal(calls.length,2);
-    await db.query('UPDATE organizaciones SET latitud = latitud + 0.01 WHERE id_organizacion = ?',[delivery.id_organizacion||accounts.organizacion.user.perfil.id_organizacion]);
-    const changed=(await call('GET',routePath,undefined,accounts.organizacion)).data.data;
-    assert.equal(changed.plan_actual,undefined);
-    assert.equal((await call('GET',`/api/donaciones/${d.id_donacion}`,undefined,accounts.organizacion)).data.data.plan_ruta,undefined);
-  }finally{
-    await db.query('UPDATE organizaciones SET latitud=?,longitud=? WHERE id_organizacion=?',[original.latitud,original.longitud,accounts.organizacion.user.perfil.id_organizacion]);
-    if(previousProvider===undefined)delete process.env.ROUTING_PROVIDER;else process.env.ROUTING_PROVIDER=previousProvider;
-    if(previousUrl===undefined)delete process.env.OSRM_URL;else process.env.OSRM_URL=previousUrl;
-    await new Promise(resolve=>provider.close(resolve));
-  }
 });
 
 test('Custodia: aceptación crea asignación, entrega y seguimiento con permisos y secuencia sin saltos', async () => {
@@ -167,13 +110,14 @@ test('Custodia: transferencias requieren responsables, concurrencia protegida y 
   const body = { version: 1, lugar: 'Ubicación declarada de prueba', condicion_declarada: 'sin_novedad', observacion: 'Revisión declarada por responsable de prueba.', responsable_entrega: 'Donante prueba', responsable_recibe: 'Receptor prueba' };
   const simultaneous = await Promise.all([call('POST', path, { ...body, tipo: 'listo' }, accounts.donante), call('POST', path, { ...body, tipo: 'listo' }, accounts.donante)]);
   assert.deepEqual(simultaneous.map(r => r.status).sort(), [201, 409]);
-  assert.equal((await call('POST', path, { ...body, version: 2, tipo: 'recogido', responsable_recibe: '' }, accounts.organizacion)).status, 422);
   assert.equal((await call('POST', path, { ...body, version: 2, tipo: 'recogido' }, accounts.organizacion)).status, 201);
   assert.equal((await call('POST', `/api/donaciones/${d.id_donacion}/cancelar`, { motivo: 'No debe desaparecer la custodia activa.' }, accounts.donante)).status, 409);
-  for (const [stage, version] of [['en_transito', 3], ['entregado', 4], ['confirmado', 5]]) assert.equal((await call('POST', path, { ...body, version, tipo: stage }, accounts.organizacion)).status, 201);
+  assert.equal((await one('SELECT responsable_recepcion FROM entregas WHERE id_entrega = ?', [delivery.id_entrega])).responsable_recepcion, 'Receptor prueba');
+  assert.equal((await call('POST', path, { ...body, version: 3, tipo: 'confirmado' }, accounts.donante)).status, 403);
+  assert.equal((await call('POST', path, { ...body, version: 3, tipo: 'confirmado' }, accounts.organizacion)).status, 201);
   const row = (await call('GET', `/api/seguimiento/${delivery.id_entrega}`, undefined, accounts.organizacion)).data.data;
-  assert.equal(row.estado, 'confirmado'); assert.equal(row.hitos.length, 6); assert.equal(row.custodio_actual, 'Receptor prueba');
-  assert.equal((await call('POST', path, { ...body, version: 6, tipo: 'observacion' }, accounts.organizacion)).status, 409);
+  assert.equal(row.estado, 'confirmado'); assert.equal(row.hitos.length, 4); assert.equal(row.custodio_actual, 'Receptor prueba');
+  assert.equal((await call('POST', path, { ...body, version: 4, tipo: 'observacion' }, accounts.organizacion)).status, 409);
   const stored = await one('SELECT * FROM entregas WHERE id_entrega = ?', [delivery.id_entrega]);
   assert.equal(stored.estado, 'confirmada'); assert.equal(stored.responsable_recepcion, 'Receptor prueba');
   assert.ok(stored.fecha_recojo && stored.fecha_entrega && stored.fecha_confirmacion);
@@ -224,7 +168,7 @@ test('Custodia: una incidencia crítica abierta impide confirmar recepción y co
   assert.equal(created.status, 201); assert.equal(created.data.data.titulo, 'Envase pendiente de revisión');
   const body = { lugar: 'Lugar declarado de prueba', condicion_declarada: 'sin_novedad', observacion: 'Registro manual durante prueba aislada.', responsable_entrega: 'Responsable que entrega', responsable_recibe: 'Responsable que recibe' };
   let version = 2;
-  for (const stage of ['listo', 'recogido', 'en_transito', 'entregado']) {
+  for (const stage of ['listo', 'recogido']) {
     const response = await call('POST', `/api/seguimiento/${delivery.id_entrega}/hitos`, { ...body, tipo: stage, version }, stage === 'listo' ? accounts.donante : accounts.organizacion);
     assert.equal(response.status, 201, JSON.stringify(response.data)); version++;
   }
@@ -234,7 +178,7 @@ test('Custodia: una incidencia crítica abierta impide confirmar recepción y co
   assert.equal(resolved.status, 200);
   assert.equal((await call('POST', `/api/seguimiento/${delivery.id_entrega}/hitos`, { ...body, tipo: 'confirmado', version: version + 1 }, accounts.organizacion)).status, 201);
   const stages = await all("SELECT etapa FROM seguimientos WHERE id_donacion = ? AND etapa NOT IN ('publicada','solicitud_recibida') ORDER BY id_seguimiento", [d.id_donacion]);
-  assert.deepEqual(stages.map(row => row.etapa), ['solicitud_aceptada', 'lista_recojo', 'en_recojo', 'en_traslado', 'entregada', 'recepcion_confirmada']);
+  assert.deepEqual(stages.map(row => row.etapa), ['solicitud_aceptada', 'lista_recojo', 'en_recojo', 'recepcion_confirmada']);
 });
 
 test('Autenticación: tabla usuarios, hash scrypt, cookie protegida, rol, error y cierre de sesión', async () => {
@@ -267,13 +211,13 @@ test('Seguridad: autenticación, roles, CSRF, Origin, páginas y archivos privad
 test('Registro público: administrador prohibido, usuario pendiente, perfil pendiente y datos geográficos persistentes', async () => {
   const { default: sharp } = await import('sharp');
   const foto = { tipo: 'image/png', datos: (await sharp({ create: { width: 40, height: 30, channels: 3, background: '#0b7156' } }).png().toBuffer()).toString('base64') };
-  const payload = { nombre: 'Donante registrado de prueba', correo: 'nuevo.donante@gmail.com', telefono: '951000000', rol: 'donante', contrasena: password, foto, perfil: { nombre_establecimiento: 'Donante nuevo', ruc: '20123456789', dni_representante: '71234567', direccion: 'Punto de prueba Puno', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', referencia: 'Frente al parque', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } };
+  const payload = { nombre: 'Donante registrado de prueba', correo: 'nuevo.donante@gmail.com', telefono: '951000000', rol: 'donante', contrasena: password, acepta_datos: true, foto, perfil: { nombre_establecimiento: 'Donante nuevo', ruc: '20123456789', dni_representante: '71234567', direccion: 'Punto de prueba Puno', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', referencia: 'Frente al parque', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } };
   assert.equal((await call('POST', '/api/auth/register', { ...payload, rol: 'administrador' })).status, 422);
   assert.equal((await call('POST', '/api/auth/register', { ...payload, perfil: { ...payload.perfil, ubicacion_confirmada: false } })).status, 422);
   assert.equal((await call('POST', '/api/auth/register', { ...payload, telefono: '1'.repeat(21) })).status, 422);
   // Reglas del registro: correo usuario@dominio.extension, teléfono de 9 dígitos, DNI de 8, RUC de 11, contraseña de 8 con letras y números, foto y ubicación en Puno.
   for (const override of [{ correo: 'peña@gmail.com' }, { correo: 'ana maria@gmail.com' }, { correo: 'alguien@dominio' }, { telefono: '95123456a' }, { telefono: '851234567' }, { nombre: 'Juan123 Pérez' }, { nombre: 'Juan' },
-    { contrasena: 'solamenteletras' }, { contrasena: 'abc1234' }, { foto: undefined }, { foto: { tipo: 'image/png', datos: Buffer.from('no es imagen').toString('base64') } },
+    { contrasena: 'solamenteletras' }, { contrasena: 'abc1234' }, { foto: undefined }, { acepta_datos: false }, { acepta_datos: undefined }, { foto: { tipo: 'image/png', datos: Buffer.from('no es imagen').toString('base64') } },
     { perfil: { ...payload.perfil, dni_representante: '1234567' } }, { perfil: { ...payload.perfil, dni_representante: '1234567a' } }, { perfil: { ...payload.perfil, ruc: '2012345678' } }, { perfil: { ...payload.perfil, ruc: undefined } },
     { perfil: { ...payload.perfil, distrito: 'Miraflores' } }, { perfil: { ...payload.perfil, provincia: 'Lima' } }, { perfil: { ...payload.perfil, latitud: -12.04, longitud: -77.03 } }, { perfil: { ...payload.perfil, direccion: '12345' } }])
     assert.equal((await call('POST', '/api/auth/register', { ...payload, ...override })).status, 422, JSON.stringify(override).slice(0, 200));
@@ -358,11 +302,8 @@ test('Propiedad: otro donante no puede leer, editar, cancelar ni aceptar donacio
   assert.equal((await call('GET', `/api/donaciones/${hidden.data.data.id_donacion}`, undefined, accounts.organizacion)).status, 403);
   const eligibleCatalog = (await call('GET', '/api/donaciones', undefined, accounts.organizacion)).data.data;
   assert.ok(!eligibleCatalog.some(row => row.id_donacion === hidden.data.data.id_donacion));
-  assert.equal((await call('POST', `/api/donaciones/${created.id_donacion}/evaluacion`, { id_solicitud: req.id_solicitud }, accounts.organizacion2)).status, 403);
-  assert.equal((await call('POST', `/api/donaciones/${created.id_donacion}/evaluacion`, { id_solicitud: 'no-numero' }, accounts.organizacion)).status, 400);
-  const canceled = await createDonation({ alimento: 'Cancelada sin solicitud de la organización' });
-  assert.equal((await call('POST', `/api/donaciones/${canceled.id_donacion}/cancelar`, { motivo: 'Prueba de acceso logístico restringido.' }, accounts.donante)).status, 200);
-  assert.equal((await call('POST', `/api/donaciones/${canceled.id_donacion}/evaluacion`, {}, accounts.organizacion2)).status, 403);
+  // El cálculo de rutas se retiró: esas direcciones de la API ya no existen.
+  assert.equal((await call('POST', `/api/donaciones/${created.id_donacion}/evaluacion`, {}, accounts.organizacion)).status, 404);
 });
 
 test('Solicitudes: creación pendiente, datos anidados, recibidas por el donante, duplicado y bloqueo de edición', async () => {
@@ -569,7 +510,7 @@ test('Perfil: edición completa con foto, DNI privado y fotos visibles solo entr
   assert.doesNotMatch(JSON.stringify(catalog), /40111222/);
   // Foto de la beneficiaria: el donante la ve solo si ella le envió una solicitud (organización nueva, sin relación previa).
   const orgEmail = 'vaso.leche.nuevo@gmail.com';
-  const registered = await call('POST', '/api/auth/register', { nombre: 'Elena Mamani Choque', correo: orgEmail, telefono: '951666777', rol: 'organizacion', contrasena: 'vaso12345', foto, perfil: { nombre: 'Vaso de Leche Barrio Bellavista', tipo_organizacion: 'Vaso de Leche', numero_beneficiarios: 45, dni_representante: '42424242', direccion: 'Jr. Ayacucho 300', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } });
+  const registered = await call('POST', '/api/auth/register', { nombre: 'Elena Mamani Choque', correo: orgEmail, telefono: '951666777', rol: 'organizacion', contrasena: 'vaso12345', acepta_datos: true, foto, perfil: { nombre: 'Vaso de Leche Barrio Bellavista', tipo_organizacion: 'Vaso de Leche', numero_beneficiarios: 45, dni_representante: '42424242', direccion: 'Jr. Ayacucho 300', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } });
   assert.equal(registered.status, 201, JSON.stringify(registered.data));
   await db.query("UPDATE organizaciones SET estado_verificacion = 'verificado' WHERE id_usuario = ?", [registered.data.data.id_usuario]);
   const orgLogin = await call('POST', '/api/auth/login', { correo: orgEmail, contrasena: 'vaso12345' });
@@ -594,7 +535,7 @@ test('Cambio de contraseña desde el perfil: exige la actual y renueva la sesió
   const { default: sharp } = await import('sharp');
   const foto = { tipo: 'image/png', datos: (await sharp({ create: { width: 20, height: 20, channels: 3, background: '#0b7156' } }).png().toBuffer()).toString('base64') };
   const correo = 'cambio.clave@gmail.com';
-  assert.equal((await call('POST', '/api/auth/register', { nombre: 'Lucía Condori Ramos', correo, telefono: '951444555', rol: 'organizacion', contrasena: 'clave1234', foto, perfil: { nombre: 'Comedor Popular Central', tipo_organizacion: 'Comedor Popular', numero_beneficiarios: 80, dni_representante: '45454545', direccion: 'Jr. Moquegua 210', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } })).status, 201);
+  assert.equal((await call('POST', '/api/auth/register', { nombre: 'Lucía Condori Ramos', correo, telefono: '951444555', rol: 'organizacion', contrasena: 'clave1234', acepta_datos: true, foto, perfil: { nombre: 'Comedor Popular Central', tipo_organizacion: 'Comedor Popular', numero_beneficiarios: 80, dni_representante: '45454545', direccion: 'Jr. Moquegua 210', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } })).status, 201);
   const logged = await call('POST', '/api/auth/login', { correo, contrasena: 'clave1234' });
   const account = { cookie: logged.response.headers.get('set-cookie').split(';')[0], csrfToken: logged.data.csrfToken };
   assert.equal((await call('POST', '/api/auth/contrasena', { actual: 'incorrecta1', nueva: 'nueva12345' }, account)).status, 422);
@@ -615,4 +556,332 @@ test('Tiempo de llegada: la beneficiaria lo declara al solicitar y el donante lo
   const received = (await call('GET', `/api/solicitudes?id_donacion=${d.id_donacion}`, undefined, accounts.donante)).data.data;
   assert.equal(received[0].tiempo_llegada_min, 45);
   assert.equal((await call('PATCH', `/api/solicitudes/${s.id_solicitud}`, request({ tiempo_llegada_min: 30 }), accounts.organizacion)).data.data.tiempo_llegada_min, 30);
+});
+
+// ---------- Módulos definitivos: declaración, notificaciones, contacto, recojo, administración, listas y reportes ----------
+async function photo(color = '#0b7156') {
+  const { default: sharp } = await import('sharp');
+  return { tipo: 'image/png', datos: (await sharp({ create: { width: 24, height: 24, channels: 3, background: color } }).png().toBuffer()).toString('base64') };
+}
+// Registra una cuenta nueva; con verify la deja verificada como lo haría administración.
+async function registerAccount(rol, correo, { verify = true, perfil = {} } = {}) {
+  const base = { direccion: 'Jr. Lima 100', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true, dni_representante: '41414141' };
+  const profile = rol === 'donante' ? { nombre_establecimiento: 'Bodega de prueba', ruc: '20111222333', ...base, ...perfil } : { nombre: 'Comedor de prueba', tipo_organizacion: 'Comedor Popular', numero_beneficiarios: 40, ...base, ...perfil };
+  const result = await call('POST', '/api/auth/register', { nombre: 'Rosa Apaza Flores', correo, telefono: '951777888', rol, contrasena: 'clave1234', acepta_datos: true, foto: await photo(), perfil: profile });
+  assert.equal(result.status, 201, JSON.stringify(result.data));
+  if (verify) assert.equal((await call('POST', `/api/admin/cuentas/${result.data.data.id_usuario}/verificacion`, { estado: 'verificado' }, accounts.admin)).status, 200);
+  const logged = await call('POST', '/api/auth/login', { correo, contrasena: 'clave1234' });
+  return { id_usuario: result.data.data.id_usuario, cookie: logged.response.headers.get('set-cookie').split(';')[0], csrfToken: logged.data.csrfToken, user: logged.data.user };
+}
+const notices = async account => (await call('GET', '/api/notificaciones', undefined, account)).data.data;
+
+test('Donación: el donante debe declarar que el alimento está en buen estado', async () => {
+  const missing = await call('POST', '/api/donaciones', donation({ declaracion_buen_estado: undefined }), accounts.donante);
+  assert.equal(missing.status, 422); assert.equal(missing.data.error.code, 'DECLARATION_REQUIRED');
+  const created = await createDonation();
+  const detail = await one("SELECT descripcion FROM auditoria WHERE tabla_afectada = 'donaciones' AND id_registro = ? AND accion = 'crear'", [created.id_donacion]);
+  assert.equal(JSON.parse(detail.descripcion).declaracion_buen_estado, true);
+});
+
+test('Notificaciones y contacto: avisos a la otra parte y teléfono del donante solo tras aceptar', async () => {
+  const before = (await call('GET', '/api/notificaciones/resumen', undefined, accounts.donante)).data.data;
+  const d = await createDonation({ alimento: 'Avena para notificar' });
+  const s = await createRequest(d.id_donacion);
+  const donorNotices = await notices(accounts.donante);
+  assert.ok(donorNotices.some(n => n.tipo === 'solicitud_nueva' && n.id_solicitud === s.id_solicitud && n.mensaje.includes('Avena para notificar')));
+  const after = (await call('GET', '/api/notificaciones/resumen', undefined, accounts.donante)).data.data;
+  assert.ok(after.no_leidas > before.no_leidas); assert.ok(after.ultima > before.ultima);
+  // Antes de aceptar, la beneficiaria no ve el teléfono del donante.
+  let mine = (await call('GET', `/api/solicitudes?id_donacion=${d.id_donacion}`, undefined, accounts.organizacion)).data.data[0];
+  assert.equal(mine.contacto_donante, null);
+  assert.equal((await call('POST', `/api/solicitudes/${s.id_solicitud}/aceptar`, { id_donacion: d.id_donacion }, accounts.donante)).status, 200);
+  mine = (await call('GET', `/api/solicitudes?id_donacion=${d.id_donacion}`, undefined, accounts.organizacion)).data.data[0];
+  const donorPhone = (await one("SELECT telefono FROM usuarios WHERE correo = 'donante@realimenta.test'")).telefono;
+  assert.equal(mine.contacto_donante.telefono, donorPhone);
+  assert.ok((await notices(accounts.organizacion)).some(n => n.tipo === 'solicitud_aceptada' && n.id_solicitud === s.id_solicitud));
+  const tracking = (await call('GET', `/api/seguimiento/${mine.id_seguimiento}`, undefined, accounts.organizacion)).data.data;
+  assert.equal(tracking.origen.telefono, donorPhone); assert.equal(tracking.destino.telefono, '951000000');
+  assert.equal(tracking.plan_actual, undefined);
+  // Marcar como leída: solo las propias.
+  const first = (await notices(accounts.donante))[0];
+  assert.equal((await call('POST', `/api/notificaciones/${first.id_notificacion}/leida`, {}, accounts.organizacion2)).status, 404);
+  assert.equal((await call('POST', `/api/notificaciones/${first.id_notificacion}/leida`, {}, accounts.donante)).status, 200);
+  assert.equal((await call('POST', '/api/notificaciones/leidas', {}, accounts.donante)).status, 200);
+  assert.equal((await call('GET', '/api/notificaciones/resumen', undefined, accounts.donante)).data.data.no_leidas, 0);
+  assert.equal((await call('GET', '/api/notificaciones')).status, 401);
+});
+
+test('Recojo no realizado: la donación vuelve a publicarse, se avisa y el nuevo seguimiento empieza limpio', async () => {
+  const d = await createDonation({ alimento: 'Quinua para reasignar' });
+  const first = await createRequest(d.id_donacion, accounts.organizacion);
+  const second = await createRequest(d.id_donacion, accounts.organizacion2);
+  assert.equal((await call('POST', `/api/solicitudes/${first.id_solicitud}/aceptar`, { id_donacion: d.id_donacion }, accounts.donante)).status, 200);
+  const delivery = await one('SELECT * FROM entregas WHERE id_donacion = ?', [d.id_donacion]);
+  const path = `/api/seguimiento/${delivery.id_entrega}`;
+  assert.equal((await call('POST', `${path}/hitos`, { tipo: 'listo', version: 1 }, accounts.donante)).status, 201);
+  assert.equal((await call('POST', `${path}/anular`, { motivo: 'x' }, accounts.donante)).status, 422);
+  assert.equal((await call('POST', `${path}/anular`, { motivo: 'Nadie vino a la hora acordada.' }, accounts.organizacion2)).status, 403);
+  const released = await call('POST', `${path}/anular`, { motivo: 'Nadie vino a la hora acordada.' }, accounts.donante);
+  assert.equal(released.status, 200, JSON.stringify(released.data)); assert.equal(released.data.data.reabierta, true);
+  assert.equal((await one('SELECT estado FROM donaciones WHERE id_donacion = ?', [d.id_donacion])).estado, 'disponible');
+  assert.equal((await one('SELECT estado FROM solicitudes WHERE id_solicitud = ?', [first.id_solicitud])).estado, 'cancelada');
+  assert.equal((await one('SELECT COUNT(*) AS total FROM asignaciones WHERE id_donacion = ?', [d.id_donacion])).total, 0);
+  assert.equal((await call('GET', path, undefined, accounts.donante)).status, 404);
+  assert.ok((await notices(accounts.organizacion)).some(n => n.tipo === 'recojo_anulado' && n.id_donacion === d.id_donacion));
+  assert.ok((await notices(accounts.organizacion2)).some(n => n.tipo === 'donacion_reabierta' && n.id_donacion === d.id_donacion));
+  assert.ok(await one("SELECT 1 FROM auditoria WHERE tabla_afectada = 'solicitudes' AND id_registro = ? AND accion = 'no_recogida'", [first.id_solicitud]));
+  // La segunda beneficiaria vuelve a pedirla y el donante la acepta: su seguimiento no arrastra los pasos anteriores.
+  const again = await createRequest(d.id_donacion, accounts.organizacion2);
+  assert.equal(again.id_solicitud, second.id_solicitud);
+  assert.equal((await call('POST', `/api/solicitudes/${again.id_solicitud}/aceptar`, { id_donacion: d.id_donacion }, accounts.donante)).status, 200);
+  const renewed = await one('SELECT * FROM entregas WHERE id_donacion = ?', [d.id_donacion]);
+  const fresh = (await call('GET', `/api/seguimiento/${renewed.id_entrega}`, undefined, accounts.organizacion2)).data.data;
+  assert.equal(fresh.estado, 'preparacion'); assert.equal(fresh.hitos.length, 1); assert.equal(fresh.version, 1);
+  // Después del recojo ya no se puede anular.
+  const next = `/api/seguimiento/${renewed.id_entrega}`;
+  assert.equal((await call('POST', `${next}/hitos`, { tipo: 'recogido', version: 1 }, accounts.organizacion2)).status, 409);
+  assert.equal((await call('POST', `${next}/hitos`, { tipo: 'listo', version: 1 }, accounts.donante)).status, 201);
+  assert.equal((await call('POST', `${next}/hitos`, { tipo: 'recogido', version: 2 }, accounts.organizacion2)).status, 201);
+  assert.equal((await call('POST', `${next}/anular`, { motivo: 'Ya no lo necesitamos.' }, accounts.organizacion2)).status, 409);
+});
+
+test('Recojo: la beneficiaria puede avisar que no irá; si el plazo ya terminó, la donación vence', async () => {
+  const { d, delivery } = await accepted();
+  await db.query('UPDATE donaciones SET fecha_disponibilidad = NOW() - INTERVAL 3 HOUR, fecha_limite_recojo = NOW() - INTERVAL 1 MINUTE WHERE id_donacion = ?', [d.id_donacion]);
+  const released = await call('POST', `/api/seguimiento/${delivery.id_entrega}/anular`, { motivo: 'Se malogró nuestra movilidad.' }, accounts.organizacion);
+  assert.equal(released.status, 200); assert.equal(released.data.data.reabierta, false);
+  assert.equal((await one('SELECT estado FROM donaciones WHERE id_donacion = ?', [d.id_donacion])).estado, 'expirada');
+  assert.ok((await notices(accounts.donante)).some(n => n.tipo === 'recojo_anulado' && n.id_donacion === d.id_donacion && n.mensaje.includes('movilidad')));
+});
+
+test('Recepción con problemas: cierra la entrega, crea una incidencia y avisa al donante', async () => {
+  const { d, delivery } = await accepted();
+  const path = `/api/seguimiento/${delivery.id_entrega}/hitos`;
+  assert.equal((await call('POST', path, { tipo: 'listo', version: 1 }, accounts.donante)).status, 201);
+  assert.equal((await call('POST', path, { tipo: 'con_problemas', version: 2, observacion: 'Faltaban dos bolsas.' }, accounts.organizacion)).status, 409);
+  assert.equal((await call('POST', path, { tipo: 'recogido', version: 2 }, accounts.organizacion)).status, 201);
+  assert.equal((await call('POST', path, { tipo: 'con_problemas', version: 3 }, accounts.organizacion)).status, 422);
+  assert.equal((await call('POST', path, { tipo: 'con_problemas', version: 3, observacion: 'Faltaban dos bolsas.' }, accounts.donante)).status, 403);
+  assert.equal((await call('POST', path, { tipo: 'con_problemas', version: 3, observacion: 'Faltaban dos bolsas y una estaba abierta.' }, accounts.organizacion)).status, 201);
+  const t = (await call('GET', `/api/seguimiento/${delivery.id_entrega}`, undefined, accounts.donante)).data.data;
+  assert.equal(t.estado, 'con_problemas'); assert.equal(t.incidencias[0].tipo, 'recepcion'); assert.equal(t.incidencias[0].estado, 'abierta');
+  assert.equal((await one('SELECT estado FROM entregas WHERE id_entrega = ?', [delivery.id_entrega])).estado, 'con_incidencia');
+  assert.equal((await one('SELECT estado FROM donaciones WHERE id_donacion = ?', [d.id_donacion])).estado, 'finalizada');
+  assert.equal((await call('POST', path, { tipo: 'confirmado', version: 5 }, accounts.organizacion)).status, 409);
+  assert.ok((await notices(accounts.donante)).some(n => n.tipo === 'seguimiento_con_problemas' && n.id_donacion === d.id_donacion));
+  const incidents = (await call('GET', '/api/incidencias', undefined, accounts.admin)).data.data;
+  assert.ok(incidents.some(i => i.id_donacion === d.id_donacion && i.tipo === 'recepcion'));
+});
+
+test('Administración: verificar, poner en revisión, rechazar, suspender, reactivar y eliminar cuentas', async () => {
+  const org = await registerAccount('organizacion', 'comedor.revision@gmail.com', { verify: false });
+  assert.equal((await call('GET', '/api/admin/cuentas', undefined, accounts.donante)).status, 403);
+  const pending = (await call('GET', '/api/admin/cuentas?verificacion=pendiente', undefined, accounts.admin)).data.data;
+  const listed = pending.find(a => a.id_usuario === org.id_usuario);
+  assert.equal(listed.perfil.dni_representante, '41414141'); assert.match(listed.perfil.foto_url, /^\/media\/locales\//);
+  // La foto del local también la ve administración.
+  assert.equal((await call('GET', listed.perfil.foto_url, undefined, accounts.admin)).status, 200);
+  const route = `/api/admin/cuentas/${org.id_usuario}`;
+  assert.equal((await call('POST', `${route}/verificacion`, { estado: 'aprobado' }, accounts.admin)).status, 422);
+  assert.equal((await call('POST', `${route}/verificacion`, { estado: 'rechazado' }, accounts.admin)).status, 422);
+  assert.equal((await call('POST', `${route}/verificacion`, { estado: 'en_revision' }, accounts.admin)).status, 200);
+  assert.equal((await one('SELECT estado_verificacion FROM organizaciones WHERE id_usuario = ?', [org.id_usuario])).estado_verificacion, 'en_revision');
+  assert.ok((await notices(org)).some(n => n.tipo === 'verificacion' && n.titulo.includes('en revisión')));
+  const d = await createDonation({ alimento: 'Papas para la cuenta en revisión' });
+  assert.equal((await call('POST', `/api/donaciones/${d.id_donacion}/solicitudes`, request(), org)).status, 403);
+  assert.equal((await call('POST', `${route}/verificacion`, { estado: 'verificado', motivo: 'Documentos revisados.' }, accounts.admin)).status, 200);
+  assert.equal((await one('SELECT estado FROM usuarios WHERE id_usuario = ?', [org.id_usuario])).estado, 'activo');
+  const s = await createRequest(d.id_donacion, org);
+  // Suspender: su solicitud pendiente se cancela y el donante recibe el aviso; ya no puede entrar.
+  assert.equal((await call('POST', `${route}/suspender`, { motivo: 'corto' }, accounts.admin)).status, 422);
+  const suspended = await call('POST', `${route}/suspender`, { motivo: 'Datos falsos en el registro de la entidad.' }, accounts.admin);
+  assert.equal(suspended.status, 200); assert.equal(suspended.data.data.efectos.solicitudes_canceladas, 1);
+  assert.equal((await one('SELECT estado FROM solicitudes WHERE id_solicitud = ?', [s.id_solicitud])).estado, 'cancelada');
+  assert.ok((await notices(accounts.donante)).some(n => n.tipo === 'cuenta_suspendida' && n.id_solicitud === s.id_solicitud));
+  assert.equal((await call('GET', '/api/auth/me', undefined, org)).status, 401);
+  assert.equal((await call('POST', '/api/auth/login', { correo: 'comedor.revision@gmail.com', contrasena: 'clave1234' })).status, 401);
+  assert.equal((await call('POST', `${route}/suspender`, { motivo: 'Segunda suspensión de prueba.' }, accounts.admin)).status, 409);
+  assert.equal((await call('POST', `${route}/reactivar`, { motivo: 'Se aclararon los datos.' }, accounts.admin)).status, 200);
+  assert.equal((await call('POST', '/api/auth/login', { correo: 'comedor.revision@gmail.com', contrasena: 'clave1234' })).status, 200);
+  // Con historial no se elimina; una cuenta sin registros sí, junto con su foto.
+  assert.equal((await call('DELETE', route, { motivo: 'Solicitud de baja de la entidad.' }, accounts.admin)).status, 409);
+  assert.equal((await call('DELETE', `/api/admin/cuentas/${accounts.organizacion.user.id_usuario}`, { motivo: 'No se borran cuentas de prueba.' }, accounts.admin)).status, 409);
+  assert.equal((await call('DELETE', `/api/admin/cuentas/${accounts.admin.user.id_usuario}`, { motivo: 'No se gestionan administradores.' }, accounts.admin)).status, 403);
+  const lonely = await registerAccount('donante', 'bodega.sin.registros@gmail.com', { verify: false });
+  const removed = await call('DELETE', `/api/admin/cuentas/${lonely.id_usuario}`, { motivo: 'Registro duplicado por error.' }, accounts.admin);
+  assert.equal(removed.status, 200, JSON.stringify(removed.data));
+  assert.equal(await one('SELECT * FROM usuarios WHERE id_usuario = ?', [lonely.id_usuario]), undefined);
+  assert.ok(await one("SELECT 1 FROM auditoria WHERE tabla_afectada = 'usuarios' AND id_registro = ? AND accion = 'eliminar_cuenta'", [lonely.id_usuario]));
+});
+
+test('Administración: suspender a un donante cancela sus donaciones y anula recojos pendientes avisando a las beneficiarias', async () => {
+  const donor = await registerAccount('donante', 'panaderia.suspendida@gmail.com');
+  const free = await call('POST', '/api/donaciones', donation({ alimento: 'Pan que se cancela' }), donor);
+  const taken = await call('POST', '/api/donaciones', donation({ alimento: 'Pan asignado que se cancela' }), donor);
+  assert.equal(free.status, 201); assert.equal(taken.status, 201);
+  const s = await createRequest(taken.data.data.id_donacion);
+  assert.equal((await call('POST', `/api/solicitudes/${s.id_solicitud}/aceptar`, {}, donor)).status, 200);
+  const result = await call('POST', `/api/admin/cuentas/${donor.id_usuario}/suspender`, { motivo: 'Publicó alimentos vencidos de forma reiterada.' }, accounts.admin);
+  assert.equal(result.status, 200); assert.equal(result.data.data.efectos.donaciones_canceladas, 2);
+  for (const id of [free.data.data.id_donacion, taken.data.data.id_donacion]) assert.equal((await one('SELECT estado FROM donaciones WHERE id_donacion = ?', [id])).estado, 'cancelada');
+  assert.ok((await notices(accounts.organizacion)).some(n => n.tipo === 'donacion_cancelada' && n.id_donacion === taken.data.data.id_donacion));
+});
+
+test('Listas del sistema: el administrador agrega, desactiva y elimina tipos de beneficiaria y de alimento', async () => {
+  assert.equal((await call('GET', '/api/admin/catalogos', undefined, accounts.organizacion)).status, 403);
+  const added = await call('POST', '/api/admin/catalogos', { tipo: 'tipo_organizacion', valor: 'Albergue infantil' }, accounts.admin);
+  assert.equal(added.status, 201);
+  const albergue = added.data.data.tipo_organizacion.valores.find(v => v.valor === 'Albergue infantil');
+  assert.ok(albergue.activo);
+  assert.equal((await call('POST', '/api/admin/catalogos', { tipo: 'tipo_organizacion', valor: 'Albergue infantil' }, accounts.admin)).status, 409);
+  assert.equal((await call('POST', '/api/admin/catalogos', { tipo: 'otra_lista', valor: 'Algo' }, accounts.admin)).status, 422);
+  assert.match((await call('GET', '/js/puno.js')).data, /Albergue infantil/);
+  const org = await registerAccount('organizacion', 'albergue.nuevo@gmail.com', { perfil: { tipo_organizacion: 'Albergue infantil', nombre: 'Albergue Santa Rosa' } });
+  assert.equal(org.user.perfil.tipo_organizacion, 'Albergue infantil');
+  // Desactivado ya no se ofrece, pero quien lo tiene conserva su tipo al editar su perfil.
+  assert.equal((await call('PATCH', `/api/admin/catalogos/${albergue.id_catalogo}`, { activo: false }, accounts.admin)).status, 200);
+  assert.doesNotMatch((await call('GET', '/js/puno.js')).data, /Albergue infantil/);
+  const me = (await call('GET', '/api/perfil', undefined, org)).data.data;
+  assert.equal((await call('PATCH', '/api/perfil', { nombre: me.usuario.nombre, telefono: me.usuario.telefono, correo: me.usuario.correo, perfil: { ...me.perfil } }, org)).status, 200);
+  const blocked = await call('POST', '/api/auth/register', { nombre: 'Juana Ccori Mamani', correo: 'otro.albergue@gmail.com', telefono: '951777999', rol: 'organizacion', contrasena: 'clave1234', acepta_datos: true, foto: await photo(), perfil: { nombre: 'Albergue Dos', tipo_organizacion: 'Albergue infantil', numero_beneficiarios: 10, dni_representante: '42424243', direccion: 'Jr. Lima 101', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } });
+  assert.equal(blocked.status, 422);
+  assert.equal((await call('DELETE', `/api/admin/catalogos/${albergue.id_catalogo}`, undefined, accounts.admin)).status, 409);
+  // Tipo de alimento nuevo: se puede publicar con él y, si no se usó, eliminarlo.
+  const food = (await call('POST', '/api/admin/catalogos', { tipo: 'tipo_alimento', valor: 'Bebidas y jugos' }, accounts.admin)).data.data.tipo_alimento.valores.find(v => v.valor === 'Bebidas y jugos');
+  const unused = (await call('POST', '/api/admin/catalogos', { tipo: 'tipo_alimento', valor: 'Frutos secos' }, accounts.admin)).data.data.tipo_alimento.valores.find(v => v.valor === 'Frutos secos');
+  assert.equal((await call('POST', '/api/donaciones', donation({ categoria: 'Bebidas y jugos' }), accounts.donante)).status, 201);
+  assert.equal((await call('DELETE', `/api/admin/catalogos/${unused.id_catalogo}`, undefined, accounts.admin)).status, 200);
+  assert.equal((await call('PATCH', `/api/admin/catalogos/${food.id_catalogo}`, { activo: false }, accounts.admin)).status, 200);
+  assert.equal((await call('POST', '/api/donaciones', donation({ categoria: 'Bebidas y jugos' }), accounts.donante)).status, 422);
+  // Una lista nunca queda vacía.
+  const types = (await call('GET', '/api/admin/catalogos', undefined, accounts.admin)).data.data.tipo_organizacion.valores.filter(v => v.activo);
+  for (const value of types.slice(0, -1)) assert.equal((await call('PATCH', `/api/admin/catalogos/${value.id_catalogo}`, { activo: false }, accounts.admin)).status, 200);
+  assert.equal((await call('PATCH', `/api/admin/catalogos/${types.at(-1).id_catalogo}`, { activo: false }, accounts.admin)).status, 409);
+  for (const value of types.slice(0, -1)) await call('PATCH', `/api/admin/catalogos/${value.id_catalogo}`, { activo: true }, accounts.admin);
+});
+
+test('Reportes de impacto: entregas, cantidades por unidad, personas estimadas y periodo', async () => {
+  assert.equal((await call('GET', '/api/admin/reportes', undefined, accounts.donante)).status, 403);
+  assert.equal((await call('GET', '/api/admin/reportes?desde=2026-12-31&hasta=2026-01-01', undefined, accounts.admin)).status, 422);
+  const report = (await call('GET', '/api/admin/reportes', undefined, accounts.admin)).data.data;
+  assert.ok(report.resumen.entregas_completadas >= 1); assert.ok(report.resumen.entregas_con_problemas >= 1); assert.ok(report.resumen.recojos_anulados >= 2);
+  assert.ok(report.por_unidad.some(row => row.unidad === 'unidades' && row.cantidad > 0));
+  assert.ok(report.resumen.personas_estimadas >= 0); assert.ok(report.entregas.every(row => ['Recibida', 'Recibida con problemas'].includes(row.resultado)));
+  const empty = (await call('GET', '/api/admin/reportes?desde=2020-01-01&hasta=2020-01-31', undefined, accounts.admin)).data.data;
+  assert.equal(empty.resumen.entregas_completadas, 0); assert.deepEqual(empty.entregas, []);
+});
+
+// ---------- Código de verificación, expediente de verificación y edición administrativa ----------
+async function upload(path, account, buffer, type, name = 'documento.pdf') {
+  const response = await fetch(`${baseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': type, 'x-file-name': encodeURIComponent(name), Cookie: account.cookie, 'x-csrf-token': account.csrfToken }, body: buffer });
+  return { status: response.status, data: await response.json().catch(() => ({})) };
+}
+const pdf = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n');
+
+test('Código de verificación: corto, calculado en el servidor y consultable solo por las partes', async () => {
+  const d = await createDonation({ alimento: 'Lentejas con código' });
+  assert.match(d.codigo_verificacion, /^D\d+-[2-9A-Z]{4}$/);
+  const lookup = async (code, account) => call('GET', `/api/verificacion/codigo/${encodeURIComponent(code)}`, undefined, account);
+  // Se acepta en minúsculas y sin guion.
+  const own = await lookup(d.codigo_verificacion.toLowerCase().replace('-', ''), accounts.donante);
+  assert.equal(own.status, 200); assert.equal(own.data.data.tipo, 'donacion'); assert.match(own.data.data.titulo, /Lentejas con código/);
+  assert.equal((await lookup(d.codigo_verificacion, accounts.organizacion2)).status, 404);
+  assert.equal((await lookup(`${d.codigo_verificacion.slice(0, -1)}${d.codigo_verificacion.endsWith('Z') ? 'Y' : 'Z'}`, accounts.donante)).status, 404);
+  assert.equal((await lookup('no-es-un-codigo', accounts.donante)).status, 404);
+  assert.equal((await lookup(d.codigo_verificacion)).status, 401);
+  const s = await createRequest(d.id_donacion);
+  assert.match(s.codigo_verificacion, /^S\d+-[2-9A-Z]{4}$/);
+  assert.equal((await lookup(d.codigo_verificacion, accounts.organizacion)).status, 200);
+  for (const account of [accounts.organizacion, accounts.donante, accounts.admin]) assert.equal((await lookup(s.codigo_verificacion, account)).status, 200);
+  assert.equal((await lookup(s.codigo_verificacion, accounts.organizacion2)).status, 404);
+  const listed = (await call('GET', `/api/solicitudes?id_donacion=${d.id_donacion}`, undefined, accounts.donante)).data.data[0];
+  assert.equal(listed.codigo_verificacion, s.codigo_verificacion);
+});
+
+test('Expediente: el administrador adjunta documentos, registra código, rechaza con motivo y conserva el historial', async () => {
+  const org = await registerAccount('organizacion', 'olla.expediente@gmail.com', { verify: false, perfil: { tipo_organizacion: 'Olla Común', nombre: 'Olla Común Los Pinos' } });
+  const route = `/api/admin/cuentas/${org.id_usuario}`;
+  assert.equal((await upload(`${route}/documentos`, org, pdf, 'application/pdf')).status, 403);
+  assert.equal((await upload(`${route}/documentos`, accounts.admin, Buffer.from('texto simple'), 'application/pdf')).status, 422);
+  assert.equal((await upload(`${route}/documentos`, accounts.admin, pdf, 'text/plain')).status, 415);
+  const doc = await upload(`${route}/documentos`, accounts.admin, pdf, 'application/pdf', 'acta de constitución.pdf');
+  assert.equal(doc.status, 201); assert.equal(doc.data.data.nombre, 'acta de constitución.pdf');
+  const { default: sharp } = await import('sharp');
+  const image = await upload(`${route}/documentos`, accounts.admin, await sharp({ create: { width: 20, height: 20, channels: 3, background: '#ffffff' } }).png().toBuffer(), 'image/png', 'padron.png');
+  assert.equal(image.status, 201);
+  // Un documento suelto se puede quitar; ya registrado en una evaluación, se conserva.
+  const extra = await upload(`${route}/documentos`, accounts.admin, pdf, 'application/pdf', 'duplicado.pdf');
+  assert.equal((await call('DELETE', `/api/admin/documentos/${extra.data.data.id_documento}`, undefined, accounts.admin)).status, 200);
+  // La propia cuenta ve su documento; otra beneficiaria no.
+  assert.equal((await call('GET', doc.data.data.url, undefined, accounts.admin)).status, 200);
+  assert.equal((await call('GET', doc.data.data.url, undefined, org)).status, 200);
+  assert.equal((await call('GET', doc.data.data.url, undefined, accounts.organizacion)).status, 404);
+  const evaluation = { tipos: ['Revisión de documentos', 'Consulta en registro oficial (RUNOC, RUOS o SUNAT)'], codigo_registro: 'runoc-2026-0451', observaciones: 'El acta no tiene firmas de la junta.', resultado: 'rechazado' };
+  assert.equal((await call('POST', `${route}/evaluacion`, evaluation, accounts.admin)).status, 422);
+  assert.equal((await call('POST', `${route}/evaluacion`, { ...evaluation, codigo_registro: '<script>' , motivo: 'No se acreditó la existencia de la olla.' }, accounts.admin)).status, 422);
+  const rejected = await call('POST', `${route}/evaluacion`, { ...evaluation, motivo: 'No se acreditó la existencia de la olla común.' }, accounts.admin);
+  assert.equal(rejected.status, 201, JSON.stringify(rejected.data));
+  assert.equal(rejected.data.data.cuenta.estado_verificacion, 'rechazado'); assert.equal(rejected.data.data.cuenta.perfil.codigo_registro, 'RUNOC-2026-0451');
+  const [entry] = rejected.data.data.historial;
+  assert.equal(entry.resultado, 'rechazado'); assert.equal(entry.documentos.length, 2); assert.equal(entry.administrador, 'Administrador de demostración');
+  assert.deepEqual(entry.tipos, evaluation.tipos); assert.equal(entry.observaciones, evaluation.observaciones);
+  assert.equal((await call('DELETE', `/api/admin/documentos/${doc.data.data.id_documento}`, undefined, accounts.admin)).status, 409);
+  // Rechazada: conserva la cuenta y sus datos, puede entrar pero no solicitar.
+  assert.ok(await one('SELECT 1 FROM usuarios WHERE id_usuario = ?', [org.id_usuario]));
+  const d = await createDonation({ alimento: 'Papa para la olla rechazada' });
+  assert.equal((await call('POST', `/api/donaciones/${d.id_donacion}/solicitudes`, request(), org)).status, 403);
+  assert.ok((await notices(org)).some(n => n.tipo === 'verificacion' && n.mensaje.includes('No se acreditó')));
+  // Sin habilitar la subsanación no se vuelve a evaluar; la cuenta no puede subir documentos.
+  assert.equal((await call('POST', `${route}/evaluacion`, { resultado: 'verificado' }, accounts.admin)).status, 409);
+  assert.equal((await upload('/api/verificacion/documentos', org, pdf, 'application/pdf')).status, 403);
+  assert.equal((await call('POST', `${route}/subsanacion`, { instrucciones: 'Presenta el acta firmada por la junta directiva.' }, accounts.admin)).status, 200);
+  const mine = (await call('GET', '/api/verificacion/mi-expediente', undefined, org)).data.data;
+  assert.equal(mine.subsanacion_habilitada, true); assert.match(mine.instrucciones, /acta firmada/); assert.equal(mine.ultima_evaluacion.resultado, 'rechazado');
+  const presented = await upload('/api/verificacion/documentos', org, pdf, 'application/pdf', 'acta firmada.pdf');
+  assert.equal(presented.status, 201); assert.equal(presented.data.data.origen, 'cuenta');
+  assert.ok((await notices(accounts.admin)).some(n => n.tipo === 'verificacion_documento' && n.mensaje.includes('acta firmada.pdf')));
+  const approved = await call('POST', `${route}/evaluacion`, { tipos: ['Llamada o entrevista con la representante'], resultado: 'verificado', observaciones: 'Acta firmada conforme.' }, accounts.admin);
+  assert.equal(approved.status, 201);
+  assert.equal(approved.data.data.cuenta.estado, 'activo'); assert.equal(approved.data.data.cuenta.perfil.subsanacion_habilitada, false);
+  assert.equal(approved.data.data.historial.length, 3); assert.equal(approved.data.data.historial[0].documentos[0].origen, 'cuenta');
+  assert.equal((await call('POST', `/api/donaciones/${d.id_donacion}/solicitudes`, request(), org)).status, 201);
+  const file = await one('SELECT * FROM verificaciones WHERE id_usuario = ? ORDER BY id_verificacion LIMIT 1', [org.id_usuario]);
+  assert.equal(file.codigo_registro, 'RUNOC-2026-0451'); assert.equal(file.resultado, 'rechazado'); assert.ok(file.id_administrador && file.fecha);
+});
+
+test('Donante: el administrador corrige el RUC en la evaluación y uno sin verificar no publica ni acepta', async () => {
+  const donor = await registerAccount('donante', 'minimarket.ruc@gmail.com');
+  const free = await call('POST', '/api/donaciones', donation({ alimento: 'Fideos del minimarket' }), donor);
+  assert.equal(free.status, 201);
+  const s = await createRequest(free.data.data.id_donacion);
+  const route = `/api/admin/cuentas/${donor.id_usuario}`;
+  const listed = (await call('GET', `${route}/expediente`, undefined, accounts.admin)).data.data;
+  assert.equal(listed.cuenta.perfil.ruc, '20111222333');
+  assert.equal((await call('POST', `${route}/evaluacion`, { resultado: 'en_revision', ruc: '2011' }, accounts.admin)).status, 422);
+  const reviewed = await call('POST', `${route}/evaluacion`, { resultado: 'en_revision', ruc: '10456789012', tipos: ['Consulta en registro oficial (RUNOC, RUOS o SUNAT)'], observaciones: 'Se revisa la ficha RUC.' }, accounts.admin);
+  assert.equal(reviewed.status, 201); assert.equal(reviewed.data.data.cuenta.perfil.ruc, '10456789012');
+  assert.equal((await call('POST', '/api/donaciones', donation(), donor)).status, 403);
+  assert.equal((await call('POST', `/api/solicitudes/${s.id_solicitud}/aceptar`, {}, donor)).status, 403);
+});
+
+test('Administración: edita cuentas, donaciones y solicitudes, avisando a las personas afectadas', async () => {
+  const donor = await registerAccount('donante', 'bodega.editable@gmail.com');
+  const edited = await call('PATCH', `/api/admin/cuentas/${donor.id_usuario}/datos`, { telefono: '951999111', perfil: { nombre_establecimiento: 'Bodega Editada', ruc: '20999111222' } }, accounts.admin);
+  assert.equal(edited.status, 200, JSON.stringify(edited.data));
+  assert.equal(edited.data.data.telefono, '951999111'); assert.equal(edited.data.data.perfil.nombre_establecimiento, 'Bodega Editada'); assert.equal(edited.data.data.perfil.ruc, '20999111222');
+  assert.equal((await call('PATCH', `/api/admin/cuentas/${donor.id_usuario}/datos`, { perfil: { ruc: '1' } }, accounts.admin)).status, 422);
+  assert.equal((await call('PATCH', `/api/admin/cuentas/${donor.id_usuario}/datos`, { telefono: '951999111' }, accounts.donante)).status, 403);
+  assert.ok((await notices(donor)).some(n => n.tipo === 'cuenta_editada'));
+  const d = await call('POST', '/api/donaciones', donation({ alimento: 'Arroz por corregir' }), donor);
+  const s = await createRequest(d.data.data.id_donacion);
+  const fixed = await call('PATCH', `/api/admin/donaciones/${d.data.data.id_donacion}`, { alimento: 'Arroz corregido', cantidad: 12 }, accounts.admin);
+  assert.equal(fixed.status, 200, JSON.stringify(fixed.data));
+  assert.equal((await one('SELECT nombre_alimento, cantidad FROM donaciones WHERE id_donacion = ?', [d.data.data.id_donacion])).nombre_alimento, 'Arroz corregido');
+  assert.ok((await notices(accounts.organizacion)).some(n => n.tipo === 'donacion_editada' && n.id_donacion === d.data.data.id_donacion));
+  assert.equal((await call('POST', `/api/admin/solicitudes/${s.id_solicitud}/cancelar`, { motivo: 'corto' }, accounts.admin)).status, 422);
+  assert.equal((await call('POST', `/api/admin/solicitudes/${s.id_solicitud}/cancelar`, { motivo: 'Solicitud duplicada por error de la beneficiaria.' }, accounts.admin)).status, 200);
+  assert.equal((await one('SELECT estado FROM solicitudes WHERE id_solicitud = ?', [s.id_solicitud])).estado, 'cancelada');
+  assert.equal((await call('POST', `/api/admin/donaciones/${d.data.data.id_donacion}/cancelar`, { motivo: 'El alimento no cumple las condiciones declaradas.' }, accounts.admin)).status, 200);
+  assert.equal((await one('SELECT estado FROM donaciones WHERE id_donacion = ?', [d.data.data.id_donacion])).estado, 'cancelada');
+  assert.ok((await notices(donor)).some(n => n.tipo === 'donacion_cancelada' && n.mensaje.includes('no cumple')));
 });

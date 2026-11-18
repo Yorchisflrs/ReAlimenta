@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # Fondos locales y seguimiento — REAlimenta
 
 Implementación local en `C:\xampp\htdocs\proyecto`, con MySQL/MariaDB de XAMPP. No se cambió la estructura de ninguna tabla ni se trasladaron registros de PostgreSQL.

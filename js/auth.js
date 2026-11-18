@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const found = await REAMaps.search(query);
       const locations = Array.isArray(found) ? found : found.data || [];
-      if (!locations.length) results.textContent = 'No encontramos esa dirección. Acerca el mapa y selecciona manualmente el punto correcto.';
+      if (!locations.length) results.textContent = 'No encontramos esa dirección. Toca el mapa cerca de tu local: el punto es solo referencial.';
       locations.slice(0, 5).forEach(item => {
         const choice = document.createElement('button');
         choice.type = 'button';
@@ -114,14 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         results.append(choice);
       });
-    } catch (error) { results.textContent = `${error.message} Puedes seleccionar el punto directamente en el mapa.`; }
+    } catch (error) { results.textContent = `${error.message} Puedes tocar el mapa cerca de tu local: el punto es solo referencial.`; }
     finally { button.disabled = false; }
   });
   register.addEventListener('submit', async event => {
     event.preventDefault();
     if (!register.reportValidity()) return;
     if (register.contrasena.value !== register.confirmacion.value) { showMessage('Las contraseñas no coinciden.'); return; }
-    if (!confirmed || !register.latitud.value || !register.longitud.value) { showMessage('Marca tu local en el mapa y marca la casilla que confirma que el punto es correcto.'); return; }
+    if (!confirmed || !register.latitud.value || !register.longitud.value) { showMessage('Marca en el mapa un punto aproximado de tu local y marca la casilla de confirmación.'); return; }
     const button = register.querySelector('[type="submit"]');
     button.disabled = true;
     button.textContent = 'Creando tu cuenta…';
@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
       else Object.assign(perfil, { nombre: register.entidad.value.trim(), tipo_organizacion: register.tipo_organizacion.value, numero_beneficiarios: Number(register.numero_beneficiarios.value) });
       const file = photoInput.files[0];
       const foto = { tipo: file.type, datos: await readBase64(file) };
-      await REA.request('/api/auth/register', { method: 'POST', body: { nombre: register.nombre.value.trim(), correo: register.correo.value.trim().toLowerCase(), telefono: register.telefono.value.trim(), contrasena: register.contrasena.value, rol: role, perfil, foto } });
+      await REA.request('/api/auth/register', { method: 'POST', body: { nombre: register.nombre.value.trim(), correo: register.correo.value.trim().toLowerCase(), telefono: register.telefono.value.trim(), contrasena: register.contrasena.value, rol: role, perfil, foto, acepta_datos: register.acepta_datos.checked } });
       showMessage(role === 'donante' ? '¡Gracias por sumarte!' : 'Tu cuenta está PENDIENTE DE VERIFICACIÓN. Te contactaremos al celular o correo que registraste para coordinar. ¡Gracias por unirte a REAlimenta!', true);
       register.hidden = true;
       document.querySelector('[data-registration-success]').hidden = false;

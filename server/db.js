@@ -78,7 +78,8 @@ export const placeholders = values => values.map(() => '?').join(', ');
 const MODULES = {
   usuarios: 'autenticacion', donantes: 'perfil', organizaciones: 'perfil', donaciones: 'donaciones',
   donacion_fotos: 'fotografias', solicitudes: 'solicitudes', asignaciones: 'solicitudes',
-  entregas: 'custodia', seguimientos: 'custodia', incidencias: 'custodia', evaluaciones_ruta: 'logistica'
+  entregas: 'custodia', seguimientos: 'custodia', incidencias: 'custodia', evaluaciones_ruta: 'logistica',
+  catalogos: 'configuracion', notificaciones: 'notificaciones', verificaciones: 'verificacion', verificacion_documentos: 'verificacion'
 };
 export async function audit(client, actor, table, id, action, detail = {}) {
   await client.query(`INSERT INTO auditoria (id_usuario, modulo, accion, tabla_afectada, id_registro, descripcion)

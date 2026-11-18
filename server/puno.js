@@ -34,4 +34,5 @@ export const TIPOS_ORGANIZACION = ['Olla Común', 'Comedor Popular', 'Vaso de Le
 // Tipos de alimento de una donación (se guardan en donaciones.categoria).
 export const TIPOS_ALIMENTO = ['Abarrotes y alimentos secos', 'Conservas y enlatados', 'Verduras, tubérculos y frutas', 'Carnes, pescados y huevos', 'Lácteos y derivados', 'Panadería y complementos', 'Alimentos preparados'];
 
-export const browserScript = () => `window.REAPuno=${JSON.stringify({ PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO, DNI, RUC, TIPOS_ORGANIZACION, TIPOS_ALIMENTO })};`;
+// Los tipos vigentes vienen de la tabla catalogos (el administrador los puede cambiar).
+export const browserScript = (lists = {}) => `window.REAPuno=${JSON.stringify({ PROVINCIAS, LIMITES, TELEFONO, NOMBRE, CORREO_REGISTRO, DNI, RUC, TIPOS_ORGANIZACION, TIPOS_ALIMENTO, ...lists })};`;

@@ -131,15 +131,23 @@ export function csrf(req, res, next) {
   next();
 }
 
-// Límite defensivo por IP; usuarios, perfiles y auditoría persisten en MySQL.
+// Límite defensivo por IP. Solo cuentan los intentos fallidos (contraseña incorrecta) y los registros:
+// así un aula o una oficina que comparten la misma red no se bloquean por entrar correctamente.
 const attempts = new Map();
-function loginLimit(req) {
-  const key = req.ip;
+function entryFor(key) {
   const now = Date.now();
-  const entry = attempts.get(key);
-  if (!entry || entry.until < now) { attempts.set(key, { count: 1, until: now + 15 * 60000 }); return; }
-  if (++entry.count > 60) fail(429, 'TOO_MANY_ATTEMPTS', 'Demasiados intentos. Espere 15 minutos antes de reintentar.');
+  let entry = attempts.get(key);
+  if (!entry || entry.until < now) { entry = { count: 0, until: now + 15 * 60000 }; attempts.set(key, entry); }
   if (attempts.size > 10000) for (const [k, v] of attempts) if (v.until < now) attempts.delete(k);
+  return entry;
+}
+function loginLimit(req) {
+  if (entryFor(`fallos:${req.ip}`).count >= 30) fail(429, 'TOO_MANY_ATTEMPTS', 'Demasiados intentos fallidos. Espere 15 minutos antes de reintentar.');
+}
+const failedAttempt = req => { entryFor(`fallos:${req.ip}`).count++; };
+// Registros: cuentan las cuentas creadas, no los formularios con datos inválidos.
+function registerLimit(req) {
+  if (entryFor(`registro:${req.ip}`).count >= 40) fail(429, 'TOO_MANY_ATTEMPTS', 'Se crearon muchas cuentas desde esta conexión. Espere 15 minutos antes de reintentar.');
 }
 const passwordInput = passwordRule;
 const DUMMY_HASH = 'scrypt$16384$8$1$fb532b197b88147b5c4ab329a711f814$' + '00'.repeat(64);
@@ -153,7 +161,7 @@ authRouter.post('/login', async (req, res) => {
   const row = (await db.query('SELECT * FROM usuarios WHERE correo = ?', [correo])).rows[0];
   // Ejecutar hash también para usuarios inexistentes reduce diferencias de tiempo observables.
   const verified = await verifyPassword(password, row?.password_hash || DUMMY_HASH);
-  if (!row || !verified || !canSignIn(row.estado)) fail(401, 'INVALID_CREDENTIALS', 'Correo o contraseña incorrectos.');
+  if (!row || !verified || !canSignIn(row.estado)) { failedAttempt(req); fail(401, 'INVALID_CREDENTIALS', 'Correo o contraseña incorrectos.'); }
   const issued = issueSession(row);
   revoke(req.session);
   await audit(db, row.id_usuario, 'usuarios', row.id_usuario, 'iniciar_sesion');
@@ -167,7 +175,7 @@ authRouter.post('/contrasena', requireAuth, async (req, res) => {
   loginLimit(req);
   const row = (await db.query('SELECT * FROM usuarios WHERE id_usuario = ?', [req.user.id_usuario])).rows[0];
   const current = typeof req.body.actual === 'string' && req.body.actual.length <= 128 ? req.body.actual : '';
-  if (!(await verifyPassword(current, row.password_hash))) fail(422, 'WRONG_PASSWORD', 'La contraseña actual no es correcta.');
+  if (!(await verifyPassword(current, row.password_hash))) { failedAttempt(req); fail(422, 'WRONG_PASSWORD', 'La contraseña actual no es correcta.'); }
   const hash = await hashPassword(passwordInput(req.body.nueva));
   await transaction(async client => {
     await client.query('UPDATE usuarios SET password_hash = ? WHERE id_usuario = ?', [hash, row.id_usuario]);
@@ -184,13 +192,15 @@ authRouter.post('/logout', requireAuth, async (req, res) => {
   res.clearCookie('realimenta_session', cookieOptions).json({ data: { message: 'Sesión cerrada.' } });
 });
 authRouter.post('/register', async (req, res) => {
-  loginLimit(req);
+  registerLimit(req);
   const nombre = personName(req.body.nombre, 'nombre');
   const correo = registrationEmail(req.body.correo);
   const rol = req.body.rol;
   if (!['donante', 'organizacion'].includes(rol)) fail(422, 'INVALID_ROLE', 'Solo se permite registro público de donantes o beneficiarias.');
   const telefono = phone(req.body.telefono);
   const perfil = registrationProfile(req.body, rol);
+  // Consentimiento para tratar los datos personales (Ley 29733): sin él no se crea la cuenta.
+  if (req.body.acepta_datos !== true) fail(422, 'CONSENT_REQUIRED', 'Para registrarte, acepta el uso de tus datos personales.');
   const hash = await hashPassword(passwordInput(req.body.contrasena));
   const foto = await saveLocalPhoto(req.body.foto);
   perfil.foto_local = foto.relativePath;
@@ -204,7 +214,7 @@ authRouter.post('/register', async (req, res) => {
       const entries = Object.entries(perfil);
       await client.query(`INSERT INTO ${rol === 'donante' ? 'donantes' : 'organizaciones'} (id_usuario, ${entries.map(([key]) => key).join(', ')})
         VALUES (?, ${entries.map(() => '?').join(', ')})`, [user.insertId, ...entries.map(([, value]) => value)]);
-      await audit(client, user.insertId, 'usuarios', user.insertId, 'registrar', { rol, estado_verificacion: 'pendiente' });
+      await audit(client, user.insertId, 'usuarios', user.insertId, 'registrar', { rol, estado_verificacion: 'pendiente', consentimiento_datos: true });
       return { id_usuario: user.insertId, estado_verificacion: 'pendiente', message: 'Cuenta registrada. El perfil requiere verificación administrativa; puede iniciar sesión para consultar sus datos.' };
     });
   } catch (error) {
@@ -212,5 +222,6 @@ authRouter.post('/register', async (req, res) => {
     await unlink(foto.destination).catch(cleanup => console.error('No se pudo eliminar la foto del local no registrada:', cleanup.message));
     throw error;
   }
+  entryFor(`registro:${req.ip}`).count++;
   res.status(201).json({ data: result });
 });

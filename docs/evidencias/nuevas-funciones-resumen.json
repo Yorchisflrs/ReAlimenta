@@ -1,51 +1,48 @@
 {
-  "ejecucion": "mvigxbnk-nuevas",
-  "fecha_inicio": "2026-10-21T18:51:22.828Z",
+  "ejecucion": "mwlpt1vz-nuevas",
+  "fecha_inicio": "2026-11-18T06:03:01.513Z",
   "navegador": "Chrome del sistema mediante Playwright",
   "pruebas": [
     {
-      "nombre": "Foto propia: valida SVG, muestra vista previa y persiste imagen real tras recargar",
+      "nombre": "Fotos del alimento: rechaza SVG, pide tres ángulos, muestra vista previa y guarda WebP",
       "estado": "passed",
-      "duracion_ms": 4433,
+      "duracion_ms": 7231,
       "error": null
     },
     {
       "nombre": "Recuperación demostrativa: código visible, confirmación y acceso con contraseña nueva de cuenta aislada",
       "estado": "passed",
-      "duracion_ms": 4775,
+      "duracion_ms": 4852,
       "error": null
     },
     {
       "nombre": "Responsive nuevo: login, recuperación y formulario con fotografía sin desbordamiento a 360 px",
       "estado": "passed",
-      "duracion_ms": 4459,
+      "duracion_ms": 3399,
       "error": null
     },
     {
-      "nombre": "Cinco fondos locales: recursos reales, degradados y fotografía de pan íntegra en vistas del donante",
+      "nombre": "Tres fondos nuevos: productos locales, degradados y ambientación persistente por vista",
       "estado": "passed",
-      "duracion_ms": 3630,
+      "duracion_ms": 4245,
+      "error": null
+    },
+    {
+      "nombre": "Ojito de contraseña, consulta por código y expediente de verificación de una olla común",
+      "estado": "passed",
+      "duracion_ms": 8926,
       "error": null
     }
   ],
   "registros_creados": [
     {
-      "id_donacion": 43,
-      "alimento": "Prueba UI mvigxbnk-nuevas foto propia"
+      "id_donacion": 4,
+      "alimento": "Prueba UI mwlpt1vz-nuevas foto propia"
     }
   ],
   "errores_javascript": [],
   "peticiones_simuladas": false,
-  "foto_propia": {
-    "id_donacion": 43,
-    "url": "/media/donaciones/43992b996c9508cec3fc1924e419442942cb6fc5.webp",
-    "bytes_originales_seleccionados": 260209,
-    "bytes_webp": 218908,
-    "persistencia_recarga": true,
-    "svg_rechazado_cliente": true,
-    "svg_rechazado_api": 415
-  },
-  "fecha_fin": "2026-10-21T18:51:41.126Z",
+  "fecha_fin": "2026-11-18T06:03:32.538Z",
   "recuperacion": {
     "cuenta_aislada": "recovery.ui@realimenta.test",
     "codigo_demo_visible": true,
@@ -74,29 +71,19 @@
   "fondos": {
     "recursos": [
       {
-        "archivo": "feria-gastronomica-puno.jpeg",
+        "archivo": "entrega-productos-locales-v2.png",
         "estado": 200,
-        "bytes": 56510
+        "bytes": 2249744
       },
       {
-        "archivo": "trucha-plato-andino.jpeg",
+        "archivo": "pan-queso-local-v2.png",
         "estado": 200,
-        "bytes": 24528
+        "bytes": 2336885
       },
       {
-        "archivo": "plato-tradicional-andino.png",
+        "archivo": "cosecha-andina-v2.png",
         "estado": 200,
-        "bytes": 250507
-      },
-      {
-        "archivo": "pan-artesanal-marca-original.jpeg",
-        "estado": 200,
-        "bytes": 302968
-      },
-      {
-        "archivo": "quesos-artesanales.jpeg",
-        "estado": 200,
-        "bytes": 43841
+        "bytes": 2277383
       }
     ],
     "vistas": [
@@ -106,8 +93,8 @@
       "seguimiento",
       "nueva-donacion"
     ],
-    "pan_sin_recorte": true,
-    "marca_original_conservada_css": true,
+    "imagenes_nuevas_generadas": true,
+    "fondos_degradados": true,
     "movil": {
       "viewport": 360,
       "document": 360,

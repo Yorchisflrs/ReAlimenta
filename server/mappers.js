@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 // Traducción entre las columnas de la base MySQL "realimenta" y los nombres que consume el frontend.
 // Así la interfaz conserva su contrato mientras los datos se guardan en las tablas existentes.
 
@@ -17,6 +19,24 @@ export function splitAddress(value) {
 // solicitudes no tiene columna booleana de cadena de frío: la declaración queda como mensaje al donante.
 export const COLD_CHAIN_MESSAGE = 'La beneficiaria declara medios para mantener la cadena de frío durante el traslado.';
 export const coldChainDeclared = mensaje => typeof mensaje === 'string' && mensaje.startsWith(COLD_CHAIN_MESSAGE);
+
+// Código de verificación de los comprobantes: letra del tipo (D donación, S solicitud), número del registro y
+// 4 caracteres que salen del número y de su fecha de registro (SHA-256). Es corto para dictarlo o escribirlo
+// (Ej. D25-7KQ4), identifica el registro y no se puede inventar sin conocer su fecha exacta.
+const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+export function verificationCode(type, id, created) {
+  if (!id || !created) return null;
+  const when = new Date(created);
+  if (!Number.isFinite(when.getTime())) return null;
+  const digest = createHash('sha256').update(`${type}:${id}:${when.toISOString()}`).digest();
+  const check = [...digest.subarray(0, 4)].map(byte => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join('');
+  return `${type}${id}-${check}`;
+}
+// Acepta el código con o sin guion, en minúsculas o con espacios.
+export function parseVerificationCode(value) {
+  const match = String(value || '').toUpperCase().replace(/[\s-]/g, '').match(/^([DS])(\d{1,10})([2-9A-Z]{4})$/);
+  return match ? { type: match[1], id: Number(match[2]), code: `${match[1]}${match[2]}-${match[3]}` } : null;
+}
 
 export function parseDetail(value) {
   if (!value) return {};
@@ -50,7 +70,7 @@ export function donorProfile(row) {
   return {
     id_donante: row.id_donante, id_usuario: row.id_usuario, nombre_establecimiento: row.nombre_establecimiento,
     ruc: row.ruc, tipo_establecimiento: row.tipo_establecimiento, responsable: row.responsable || '', foto_url: localPhotoUrl(row.foto_local),
-    ...location(row), estado_verificacion: row.estado_verificacion || 'pendiente', fecha_registro: row.fecha_registro
+    ...location(row), estado_verificacion: row.estado_verificacion || 'pendiente', subsanacion_habilitada: row.subsanacion_habilitada === true || row.subsanacion_habilitada === 1, fecha_registro: row.fecha_registro
   };
 }
 export function organizationProfile(row) {
@@ -58,7 +78,8 @@ export function organizationProfile(row) {
   return {
     id_organizacion: row.id_organizacion, id_usuario: row.id_usuario, nombre: row.nombre, tipo_organizacion: row.tipo_organizacion,
     responsable: row.responsable || '', numero_beneficiarios: row.numero_beneficiarios, foto_url: localPhotoUrl(row.foto_local),
-    ...location(row), estado_verificacion: row.estado_verificacion || 'pendiente', fecha_registro: row.fecha_registro
+    codigo_registro: row.codigo_registro || '',
+    ...location(row), estado_verificacion: row.estado_verificacion || 'pendiente', subsanacion_habilitada: row.subsanacion_habilitada === true || row.subsanacion_habilitada === 1, fecha_registro: row.fecha_registro
   };
 }
 
@@ -79,6 +100,7 @@ export function donationFromRow(d, donor = null) {
     temperatura_declarada: d.temperatura_declarada || '', envase: d.tipo_envase || '', estado_envase: d.estado_envase,
     observaciones: d.observaciones || '', estado: d.estado,
     fecha_creacion: d.fecha_creacion, fecha_actualizacion: d.fecha_actualizacion,
+    codigo_verificacion: verificationCode('D', d.id_donacion, d.fecha_creacion),
     imagen_clave: '', fotos: []
   };
 }
@@ -123,7 +145,8 @@ export function requestFields(s) {
     dispone_cadena_frio: coldChainDeclared(s.mensaje), fecha_propuesta: s.fecha_recojo_propuesta,
     cantidad_solicitada: s.cantidad_solicitada, mensaje: s.mensaje || '', observaciones: s.observaciones || '', tiempo_llegada_min: s.tiempo_llegada_min ?? null,
     estado: s.estado, fecha_creacion: s.fecha_solicitud, fecha_solicitud: s.fecha_solicitud,
-    fecha_actualizacion: s.fecha_solicitud, motivo_decision: null
+    fecha_actualizacion: s.fecha_solicitud, motivo_decision: null,
+    codigo_verificacion: verificationCode('S', s.id_solicitud, s.fecha_solicitud)
   };
 }
 

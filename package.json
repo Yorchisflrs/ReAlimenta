@@ -16,7 +16,7 @@
     "demo:preparar": "node scripts/prepare-presentation.mjs",
     "demo:vigente": "node scripts/prepare-live-example.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.*",
-    "test:ui": "playwright test"
+    "test:ui": "node scripts/test-ui.mjs"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

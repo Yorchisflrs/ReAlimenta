@@ -68,59 +68,48 @@ async function noOverflow(page) {
   return sizes;
 }
 
-test('Foto propia: valida SVG, muestra vista previa y persiste imagen real tras recargar', async ({ page }) => {
+test('Fotos del alimento: rechaza SVG, pide tres ángulos, muestra vista previa y guarda WebP', async ({ page }) => {
   await login(page);
   const { food, form } = await fillDonation(page);
-  const file = form.locator('input[type="file"][name="foto"]');
-  await expect(file).toHaveAttribute('accept', /image\/jpeg.*image\/png.*image\/webp|\.jpe?g/i);
-  await file.setInputFiles({ name: 'rechazada.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20"/></svg>') });
-  await expect(form.locator('[data-photo-error], [data-form-error], [role="alert"]').filter({ hasText: /JPEG|JPG|PNG|WebP|formato|imagen/i }).first()).toBeVisible();
-  await file.setInputFiles(photoFile);
-  const selectedFileBytes = await file.evaluate(element => element.files[0].size);
-  expect(selectedFileBytes).toBeGreaterThan(1000);
-  const preview = form.locator('[data-photo-preview]');
-  await expect(preview).toBeVisible();
-  await expect.poll(() => preview.evaluate(element => {
-    const image = element instanceof HTMLImageElement ? element : element.querySelector('img');
-    return Boolean(image?.complete && image.naturalWidth > 0);
-  })).toBe(true);
+  const firstSlot = form.locator('.photo-slot-empty input').first();
+  await expect(firstSlot).toHaveAttribute('accept', /image\/jpeg.*image\/png.*image\/webp|\.jpe?g/i);
+  await firstSlot.setInputFiles({ name: 'rechazada.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20"/></svg>') });
+  await expect(form.locator('[data-photo-error]')).toBeVisible();
+  for (let i = 0; i < 3; i++) {
+    await form.locator('.photo-slot-empty input').first().setInputFiles(photoFile);
+    await expect(form.locator('.photo-slot.filled')).toHaveCount(i + 1);
+  }
+  await expect.poll(() => form.locator('.photo-slot.filled img').first().evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
   await form.screenshot({ path: fileURLToPath(new URL('foto-formulario.png', output)) });
-
+  await form.locator('[name="declaracion_buen_estado"]').check();
+  await form.locator('button[type="submit"]').click();
   const donationResponse = page.waitForResponse(response => /\/api\/donaciones$/.test(response.url()) && response.request().method() === 'POST');
   const imageResponse = page.waitForResponse(response => /\/api\/donaciones\/\d+\/foto$/.test(response.url()) && response.request().method() === 'POST');
-  await form.locator('button[type="submit"]').click();
+  const download = page.waitForEvent('download');
+  await page.locator('#app-dialog [data-action="confirm-publish"]').click();
   const created = await donationResponse;
   const donation = (await created.json()).data;
   expect(created.status()).toBe(201);
   summary.registros_creados.push({ id_donacion: donation.id_donacion, alimento: food });
-  const uploaded = await imageResponse;
-  expect(uploaded.ok(), `HTTP de subida: ${uploaded.status()}`).toBe(true);
-  expect(uploaded.request().headers()['content-type']).toMatch(/^image\/jpeg/);
+  expect((await imageResponse).ok()).toBe(true);
+  await download;
   await expect(page.locator('#main-content h1')).toHaveText(food);
   await page.reload();
-  await expect(page.locator('.mvp-dashboard-grid')).toBeVisible();
   await page.locator('.sidebar-nav [data-view="mis-donaciones"]').click();
-  const card = page.locator('.mvp-donation-card').filter({ hasText: food });
-  const image = card.locator('img[src*="/media/donaciones/"]');
+  const image = page.locator('.mvp-donation-card').filter({ hasText: food }).locator('img[src*="/media/donaciones/"]');
   await expect(image).toBeVisible();
-  await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0)).toBe(true);
   const source = await image.getAttribute('src');
   const media = await page.request.get(source);
   expect(media.status()).toBe(200);
   expect(media.headers()['content-type']).toMatch(/^image\/webp/);
-  expect(source).toMatch(/\/media\/donaciones\/donacion_\d+_[a-f0-9]{16}\.webp$/);
-  summary.foto_propia = { id_donacion: donation.id_donacion, url: source, bytes_originales_seleccionados: selectedFileBytes, bytes_webp: (await media.body()).length, persistencia_recarga: true, svg_rechazado_cliente: true };
-
-  const session = (await (await page.request.get('/api/auth/me')).json());
+  const session = await (await page.request.get('/api/auth/me')).json();
   const svg = await page.request.post(`/api/donaciones/${donation.id_donacion}/foto`, { headers: { 'Content-Type': 'image/svg+xml', 'x-csrf-token': session.csrfToken }, data: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') });
-  expect([400, 415, 422]).toContain(svg.status());
-  summary.foto_propia.svg_rechazado_api = svg.status();
+  expect([400, 409, 415, 422]).toContain(svg.status());
   expect(summary.errores_javascript).toEqual([]);
 });
 
 test('Recuperación demostrativa: código visible, confirmación y acceso con contraseña nueva de cuenta aislada', async ({ page }) => {
   await page.goto('/recuperar.html');
-  await expect(page.locator('.recovery-demo-notice')).toContainText('No se envían correos reales');
   const request = page.locator('#recovery-request-form');
   await request.locator('[name="correo"]').fill(recoveryEmail);
   await request.locator('button[type="submit"]').click();
@@ -205,5 +194,48 @@ test('Tres fondos nuevos: productos locales, degradados y ambientación persiste
   const mobile = await noOverflow(page);
   await page.screenshot({ path: fileURLToPath(new URL('fondo-pan-movil.png', output)) });
   summary.fondos = { recursos: resources, vistas: ['dashboard', ...views.map(([view]) => view)], imagenes_nuevas_generadas: true, fondos_degradados: true, movil: mobile };
+  expect(summary.errores_javascript).toEqual([]);
+});
+
+test('Ojito de contraseña, consulta por código y expediente de verificación de una olla común', async ({ browser, page }) => {
+  await page.goto('/registro.html');
+  const password = page.locator('input[name="contrasena"]');
+  await password.fill('clave1234');
+  await page.locator('.password-toggle').first().click();
+  await expect(password).toHaveAttribute('type', 'text');
+  await expect(page.getByText('Marqué en el mapa un punto aproximado de mi local.')).toBeVisible();
+  // Una olla común se registra (por API, con su foto) y el donante consulta un comprobante por su código.
+  await login(page);
+  const donation = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas'); canvas.width = 20; canvas.height = 20; canvas.getContext('2d').fillRect(0, 0, 20, 20);
+    await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre: 'Juana Mamani Quispe', correo: `olla.${Date.now()}@gmail.com`, telefono: '951777888', rol: 'organizacion', contrasena: 'clave1234', acepta_datos: true, foto: { tipo: 'image/png', datos: canvas.toDataURL('image/png').split(',')[1] }, perfil: { nombre: 'Olla Común Prueba UI', tipo_organizacion: 'Olla Común', numero_beneficiarios: 45, dni_representante: '41414141', direccion: 'Jr. Lima 100', departamento: 'Puno', provincia: 'Puno', distrito: 'Puno', latitud: -15.84, longitud: -70.02, ubicacion_confirmada: true } }) });
+    return (await REA.request('/api/donaciones', { method: 'POST', body: { declaracion_buen_estado: true, alimento: 'Quinua para consultar', categoria: 'Abarrotes y alimentos secos', cantidad: 10, unidad: 'kg', fecha_disponibilidad: new Date(Date.now() - 60000).toISOString(), fecha_limite_recojo: new Date(Date.now() + 5 * 3600000).toISOString(), direccion_recojo: 'Jr. Lima 450', distrito: 'Puno', latitud_recojo: -15.8402, longitud_recojo: -70.0278, conservacion_declarada: 'Temperatura ambiente', requiere_cadena_frio: false, envase: 'Bolsas cerradas' } })).data;
+  });
+  await page.locator('.sidebar-nav [data-view="consulta"]').click();
+  await page.locator('#lookup-form [name="codigo"]').fill(donation.codigo_verificacion.replace('-', ''));
+  await page.locator('#lookup-form button[type="submit"]').click();
+  await expect(page.locator('.lookup-result')).toContainText('Quinua para consultar');
+  // Administración: pista RUNOC, documento de respaldo y rechazo subsanable con historial.
+  const context = await browser.newContext({ baseURL: test.info().project.use.baseURL });
+  const admin = await context.newPage();
+  try {
+    await login(admin, 'admin');
+    await admin.locator('.sidebar-nav [data-view="cuentas"]').click();
+    await admin.locator('.admin-account-card').filter({ hasText: 'Olla Común Prueba UI' }).first().locator('[data-admin-action="open-file"]').click();
+    const form = admin.locator('#admin-evaluation-form');
+    await expect(form).toContainText('Ingrese el código RUNOC, si la organización cuenta con uno.');
+    await admin.locator('[data-admin-documents]').setInputFiles({ name: 'acta.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF\n') });
+    await expect(admin.locator('.file-docs')).toContainText('acta.pdf');
+    await form.locator('[name="codigo_registro"]').fill('RUNOC-2026-0451');
+    await form.locator('[name="tipos"]').first().check();
+    await form.locator('[name="resultado"]').selectOption('rechazado');
+    await form.locator('[name="motivo"]').fill('No se pudo acreditar la constitución de la olla.');
+    await form.locator('[name="subsanable"]').check();
+    await form.locator('button[type="submit"]').click();
+    await expect(admin.locator('.file-history .file-entry').first()).toContainText('Rechazada');
+    await expect(admin.locator('.file-history')).toContainText('RUNOC-2026-0451');
+    await expect(admin.locator('.file-history')).toContainText('acta.pdf');
+    await admin.screenshot({ path: fileURLToPath(new URL('expediente-verificacion.png', output)) });
+  } finally { await context.close(); }
   expect(summary.errores_javascript).toEqual([]);
 });

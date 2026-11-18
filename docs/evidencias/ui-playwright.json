@@ -1,12 +1,12 @@
 {
   "config": {
     "argv": [
-      "C:\\xampp\\htdocs\\campiaIntelligence\\CAMPIA\\tools\\node\\node.exe",
-      "E:\\8voSemestre\\Taller_Desarrollo_Sofware\\proyecto\\node_modules\\@playwright\\test\\cli.js",
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\FINESI\\VIII\\TALLER\\ReAlimenta\\node_modules\\@playwright\\test\\cli.js",
       "test"
     ],
-    "configFile": "E:\\8voSemestre\\Taller_Desarrollo_Sofware\\proyecto\\playwright.config.js",
-    "rootDir": "E:/8voSemestre/Taller_Desarrollo_Sofware/proyecto/tests",
+    "configFile": "D:\\FINESI\\VIII\\TALLER\\ReAlimenta\\playwright.config.js",
+    "rootDir": "D:/FINESI/VIII/TALLER/ReAlimenta/tests",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
@@ -22,7 +22,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "E:/8voSemestre/Taller_Desarrollo_Sofware/proyecto/test-results",
+        "outputDir": "D:/FINESI/VIII/TALLER/ReAlimenta/test-results",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -30,7 +30,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "E:/8voSemestre/Taller_Desarrollo_Sofware/proyecto/tests",
+        "testDir": "D:/FINESI/VIII/TALLER/ReAlimenta/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.spec.mjs"
@@ -42,20 +42,20 @@
       {
         "grep": {},
         "grepInvert": null,
-        "outputDir": "E:\\8voSemestre\\Taller_Desarrollo_Sofware\\proyecto\\test-results",
+        "outputDir": "D:\\FINESI\\VIII\\TALLER\\ReAlimenta\\test-results",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
         "name": "",
-        "testDir": "E:\\8voSemestre\\Taller_Desarrollo_Sofware\\proyecto\\tests",
-        "snapshotDir": "E:\\8voSemestre\\Taller_Desarrollo_Sofware\\proyecto\\tests",
+        "testDir": "D:\\FINESI\\VIII\\TALLER\\ReAlimenta\\tests",
+        "snapshotDir": "D:\\FINESI\\VIII\\TALLER\\ReAlimenta\\tests",
         "testIgnore": [],
         "testMatch": "**/*.spec.mjs",
         "timeout": 180000,
         "use": {
-          "baseURL": "http://127.0.0.1:3000",
+          "baseURL": "http://127.0.0.1:60525",
           "browserName": "chromium",
           "headless": true,
           "launchOptions": {
@@ -104,13 +104,13 @@
   },
   "suites": [
     {
-      "title": "custodia.spec.mjs",
-      "file": "custodia.spec.mjs",
+      "title": "nuevas-funciones.spec.mjs",
+      "file": "nuevas-funciones.spec.mjs",
       "column": 0,
       "line": 0,
       "specs": [
         {
-          "title": "Catálogo presentable: fotografías, direcciones y rutas sin publicaciones técnicas",
+          "title": "Fotos del alimento: rechaza SVG, pide tres ángulos, muestra vista previa y guarda WebP",
           "ok": true,
           "tags": [],
           "tests": [
@@ -125,12 +125,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3537,
+                  "duration": 7652,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:39:12.893Z",
+                  "startTime": "2026-11-18T06:03:01.538Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -138,13 +138,13 @@
               "status": "expected"
             }
           ],
-          "id": "ece91c16872bdcabc443-4d4e9828fe3911ec6806",
-          "file": "custodia.spec.mjs",
-          "line": 46,
+          "id": "6722ad0eee97b6859519-babe1a0776d0ef00d082",
+          "file": "nuevas-funciones.spec.mjs",
+          "line": 71,
           "column": 1
         },
         {
-          "title": "Seguimiento real: mapa por carretera, verde y rojo, escenario de tráfico y administración",
+          "title": "Recuperación demostrativa: código visible, confirmación y acceso con contraseña nueva de cuenta aislada",
           "ok": true,
           "tags": [],
           "tests": [
@@ -159,12 +159,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4558,
+                  "duration": 5349,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:39:16.750Z",
+                  "startTime": "2026-11-18T06:03:09.708Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -172,13 +172,13 @@
               "status": "expected"
             }
           ],
-          "id": "ece91c16872bdcabc443-d4ba6456dadb4a20e045",
-          "file": "custodia.spec.mjs",
-          "line": 57,
+          "id": "6722ad0eee97b6859519-d6343667ad3ea61fe224",
+          "file": "nuevas-funciones.spec.mjs",
+          "line": 111,
           "column": 1
         },
         {
-          "title": "Cadena de custodia completa en navegador: hitos, transferencia, incidencia y resolución",
+          "title": "Responsive nuevo: login, recuperación y formulario con fotografía sin desbordamiento a 360 px",
           "ok": true,
           "tags": [],
           "tests": [
@@ -193,12 +193,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 14223,
+                  "duration": 3518,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:39:21.330Z",
+                  "startTime": "2026-11-18T06:03:15.103Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -206,13 +206,13 @@
               "status": "expected"
             }
           ],
-          "id": "ece91c16872bdcabc443-9538c53239c5ef2881cc",
-          "file": "custodia.spec.mjs",
-          "line": 75,
+          "id": "6722ad0eee97b6859519-6796f3d43ad7fcb025c8",
+          "file": "nuevas-funciones.spec.mjs",
+          "line": 141,
           "column": 1
         },
         {
-          "title": "Seguimiento móvil a 360 px: catálogo, mapa, incidencias y formularios accesibles",
+          "title": "Tres fondos nuevos: productos locales, degradados y ambientación persistente por vista",
           "ok": true,
           "tags": [],
           "tests": [
@@ -227,12 +227,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5446,
+                  "duration": 4371,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:39:35.584Z",
+                  "startTime": "2026-11-18T06:03:18.660Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -240,9 +240,43 @@
               "status": "expected"
             }
           ],
-          "id": "ece91c16872bdcabc443-06359f3c8dac3bfd96e9",
-          "file": "custodia.spec.mjs",
-          "line": 93,
+          "id": "6722ad0eee97b6859519-929a99e749cbfd311882",
+          "file": "nuevas-funciones.spec.mjs",
+          "line": 162,
+          "column": 1
+        },
+        {
+          "title": "Ojito de contraseña, consulta por código y expediente de verificación de una olla común",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9404,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-18T06:03:23.061Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6722ad0eee97b6859519-32678761423581c587f4",
+          "file": "nuevas-funciones.spec.mjs",
+          "line": 200,
           "column": 1
         }
       ]
@@ -254,7 +288,7 @@
       "line": 0,
       "specs": [
         {
-          "title": "E2E real: publicar, recargar, consultar ruta por carretera, solicitar y aceptar",
+          "title": "Publicar con tres fotos y declaración, solicitar, aceptar y contactarse por teléfono o WhatsApp",
           "ok": true,
           "tags": [],
           "tests": [
@@ -269,12 +303,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 12625,
+                  "duration": 37336,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:39:41.091Z",
+                  "startTime": "2026-11-18T06:03:32.593Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -282,13 +316,13 @@
               "status": "expected"
             }
           ],
-          "id": "3c8ab3ee350f564cbc79-dfb861c4b38a26afc81f",
+          "id": "3c8ab3ee350f564cbc79-0f2dd4197a2470f35344",
           "file": "ui.spec.mjs",
-          "line": 132,
+          "line": 93,
           "column": 1
         },
         {
-          "title": "E2E real: editar donación, cancelar solicitud y cancelar publicación; modal con teclado",
+          "title": "Recojo en pasos: listo, recogido y recibido con problemas; anular un recojo vuelve a publicar",
           "ok": true,
           "tags": [],
           "tests": [
@@ -303,12 +337,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 11742,
+                  "duration": 9541,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:39:53.743Z",
+                  "startTime": "2026-11-18T06:04:09.978Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -316,13 +350,13 @@
               "status": "expected"
             }
           ],
-          "id": "3c8ab3ee350f564cbc79-160a1965075b7a646b03",
+          "id": "3c8ab3ee350f564cbc79-8539f902f235997ac942",
           "file": "ui.spec.mjs",
-          "line": 204,
+          "line": 123,
           "column": 1
         },
         {
-          "title": "Responsive real a 360 px: landing, login, menú y dashboard sin desbordamiento",
+          "title": "Editar donación, cancelar solicitud y cancelar publicación; ventana manejable con teclado",
           "ok": true,
           "tags": [],
           "tests": [
@@ -337,12 +371,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2336,
+                  "duration": 17682,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:40:05.506Z",
+                  "startTime": "2026-11-18T06:04:19.562Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -350,13 +384,13 @@
               "status": "expected"
             }
           ],
-          "id": "3c8ab3ee350f564cbc79-c2b62ebea95e1664cf90",
+          "id": "3c8ab3ee350f564cbc79-ebb07e2b36395da1b0db",
           "file": "ui.spec.mjs",
-          "line": 259,
+          "line": 162,
           "column": 1
         },
         {
-          "title": "Seguridad UI: contenido almacenado se muestra como texto y no crea elementos ejecutables",
+          "title": "Responsive a 360 px: portada, ingreso, menú, panel y recojo sin desbordamiento",
           "ok": true,
           "tags": [],
           "tests": [
@@ -371,12 +405,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5058,
+                  "duration": 4426,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-21T12:40:07.864Z",
+                  "startTime": "2026-11-18T06:04:37.276Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -384,9 +418,43 @@
               "status": "expected"
             }
           ],
-          "id": "3c8ab3ee350f564cbc79-abe83371ff2c9ab59772",
+          "id": "3c8ab3ee350f564cbc79-517e247335b4147dcac5",
           "file": "ui.spec.mjs",
-          "line": 277,
+          "line": 207,
+          "column": 1
+        },
+        {
+          "title": "Seguridad UI: el marcado se rechaza y los textos con comillas se muestran tal cual",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3546,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-18T06:04:41.722Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3c8ab3ee350f564cbc79-32d5cc6d3a4dd617d9a2",
+          "file": "ui.spec.mjs",
+          "line": 232,
           "column": 1
         }
       ]
@@ -394,9 +462,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-10-21T12:39:12.208Z",
-    "duration": 61406.068,
-    "expected": 8,
+    "startTime": "2026-11-18T06:03:00.436Z",
+    "duration": 105502.118,
+    "expected": 10,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

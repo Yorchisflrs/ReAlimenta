@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe una versión anterior y puede mencionar funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas). El estado actual está en [Módulos definitivos](Modulos_Definitivos_REAlimenta.md).
+
 # MÓDULOS FUNCIONALES DEL SISTEMA REAlimenta
 
 Actualización de alcance del 21 de octubre de 2026: seguimiento y custodia manual, recepción e incidencias ya están implementados. La ampliación vigente se documenta en [Seguimiento y custodia](Seguimiento_y_Custodia_REAlimenta.md), con nuevas pruebas y catálogo fotográfico. Los ejemplos y referencias de ejecución que siguen corresponden a la primera entrega de los dos módulos prioritarios; sus pendientes de custodia/recepción/incidencias quedan sustituidos por esta ampliación.
