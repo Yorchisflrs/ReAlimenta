@@ -4,7 +4,7 @@ export const REQUIRED_SCHEMA = {
   usuarios: ['id_usuario', 'nombres', 'apellidos', 'correo', 'password_hash', 'telefono', 'rol', 'estado', 'fecha_registro'],
   donantes: ['id_donante', 'id_usuario', 'nombre_establecimiento', 'ruc', 'tipo_establecimiento', 'responsable', 'direccion', 'departamento', 'provincia', 'distrito', 'latitud', 'longitud', 'estado_verificacion', 'dni_representante', 'foto_local', 'subsanacion_habilitada'],
   organizaciones: ['id_organizacion', 'id_usuario', 'nombre', 'tipo_organizacion', 'responsable', 'numero_beneficiarios', 'direccion', 'departamento', 'provincia', 'distrito', 'latitud', 'longitud', 'estado_verificacion', 'dni_representante', 'foto_local', 'codigo_registro', 'subsanacion_habilitada'],
-  donaciones: ['id_donacion', 'id_donante', 'nombre_alimento', 'categoria', 'descripcion', 'cantidad', 'unidad', 'estado_producto', 'fecha_elaboracion', 'fecha_vencimiento', 'fecha_disponibilidad', 'fecha_limite_recojo', 'fecha_limite_aprovechamiento', 'direccion_recojo', 'latitud', 'longitud', 'tipo_conservacion', 'requiere_cadena_frio', 'temperatura_declarada', 'tipo_envase', 'estado_envase', 'indicaciones_recojo', 'observaciones', 'estado', 'fecha_creacion', 'fecha_actualizacion'],
+  donaciones: ['id_donacion', 'id_donante', 'nombre_alimento', 'categoria', 'descripcion', 'cantidad', 'unidad', 'estado_producto', 'estado_alimento_declarado', 'borrador', 'fecha_elaboracion', 'fecha_vencimiento', 'fecha_disponibilidad', 'fecha_limite_recojo', 'fecha_limite_aprovechamiento', 'direccion_recojo', 'distrito_recojo', 'latitud', 'longitud', 'tipo_conservacion', 'requiere_cadena_frio', 'temperatura_declarada', 'tipo_envase', 'estado_envase', 'indicaciones_recojo', 'observaciones', 'estado', 'fecha_creacion', 'fecha_actualizacion'],
   donacion_fotos: ['id_foto', 'id_donacion', 'nombre_original', 'nombre_archivo', 'ruta_archivo', 'tipo_mime', 'tamano_bytes', 'es_principal', 'fecha_subida'],
   solicitudes: ['id_solicitud', 'id_donacion', 'id_organizacion', 'cantidad_solicitada', 'responsable_recojo', 'telefono_recojo', 'fecha_recojo_propuesta', 'tipo_transporte', 'recipiente', 'mensaje', 'observaciones', 'estado', 'fecha_solicitud', 'tiempo_llegada_min'],
   asignaciones: ['id_asignacion', 'id_donacion', 'id_solicitud', 'fecha_asignacion'],
@@ -16,7 +16,8 @@ export const REQUIRED_SCHEMA = {
   auditoria: ['id_auditoria', 'id_usuario', 'modulo', 'accion', 'tabla_afectada', 'id_registro', 'descripcion', 'fecha'],
   catalogos: ['id_catalogo', 'tipo', 'valor', 'activo', 'orden', 'fecha_creacion'],
   verificaciones: ['id_verificacion', 'id_usuario', 'id_administrador', 'tipo_verificacion', 'resultado', 'estado_anterior', 'codigo_registro', 'ruc', 'observaciones', 'motivo', 'subsanable', 'fecha'],
-  verificacion_documentos: ['id_documento', 'id_usuario', 'id_verificacion', 'id_subido_por', 'origen', 'nombre_original', 'nombre_archivo', 'tipo_mime', 'tamano_bytes', 'fecha']
+  verificacion_documentos: ['id_documento', 'id_usuario', 'id_verificacion', 'id_subido_por', 'origen', 'nombre_original', 'nombre_archivo', 'tipo_mime', 'tamano_bytes', 'fecha'],
+  recuperacion_contrasenas: ['id_usuario', 'token_hash', 'password_huella', 'vence', 'creado']
 };
 // Valores de enum que usa la aplicación y que se agregaron después (db/actualizar_modulos_definitivos.sql).
 const REQUIRED_VALUES = { donantes: { estado_verificacion: 'en_revision' }, organizaciones: { estado_verificacion: 'en_revision' } };

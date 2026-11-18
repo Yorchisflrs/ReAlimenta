@@ -88,12 +88,15 @@ CREATE TABLE `donaciones` (
   `cantidad` decimal(12,2) NOT NULL,
   `unidad` varchar(50) NOT NULL,
   `estado_producto` varchar(100) DEFAULT NULL,
+  `estado_alimento_declarado` varchar(50) DEFAULT NULL,
+  `borrador` tinyint(1) NOT NULL DEFAULT 0,
   `fecha_elaboracion` datetime DEFAULT NULL,
   `fecha_vencimiento` datetime DEFAULT NULL,
   `fecha_disponibilidad` datetime NOT NULL,
   `fecha_limite_recojo` datetime NOT NULL,
   `fecha_limite_aprovechamiento` datetime DEFAULT NULL,
   `direccion_recojo` varchar(255) DEFAULT NULL,
+  `distrito_recojo` varchar(100) DEFAULT NULL,
   `latitud` decimal(10,7) DEFAULT NULL,
   `longitud` decimal(10,7) DEFAULT NULL,
   `tipo_conservacion` varchar(100) DEFAULT NULL,
@@ -354,6 +357,16 @@ CREATE TABLE `verificacion_documentos` (
   CONSTRAINT `verificacion_documentos_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`),
   CONSTRAINT `verificacion_documentos_ibfk_2` FOREIGN KEY (`id_verificacion`) REFERENCES `verificaciones` (`id_verificacion`) ON DELETE SET NULL,
   CONSTRAINT `verificacion_documentos_ibfk_3` FOREIGN KEY (`id_subido_por`) REFERENCES `usuarios` (`id_usuario`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `recuperacion_contrasenas` (
+  `id_usuario` int(11) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `password_huella` char(64) NOT NULL,
+  `vence` datetime NOT NULL,
+  `creado` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id_usuario`),
+  CONSTRAINT `recuperacion_usuario_fk` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

@@ -1,13 +1,13 @@
 # REAlimenta: módulos definitivos (estado actual)
 
-**Versión:** noviembre de 2026. Este documento reemplaza a los documentos anteriores de `docs/`, que se conservan como historial y pueden describir funciones retiradas (cálculo de rutas, semáforo logístico, custodia en seis etapas).
+**Versión:** noviembre de 2026. Este documento reemplaza a los documentos anteriores de `docs/`, que se conservan como historial y pueden describir versiones anteriores del flujo.
 
 ## 1. Módulos
 
 | N.° | Módulo | Qué hace |
 | --- | --- | --- |
 | 1 | Cuentas y perfil | Registro por rol con DNI, RUC o tipo de entidad, foto del local y consentimiento de datos (Ley N.° 29733). Inicio de sesión, edición del perfil y cambio de contraseña con botón para mostrarla u ocultarla. |
-| 2 | Donaciones y catálogo | El donante publica con tres fotos y declara que el alimento está en buen estado. La beneficiaria busca y filtra. Las donaciones vencen solas al terminar su plazo. |
+| 2 | Donaciones y catálogo | El donante publica con tres fotos obligatorias y hasta dos adicionales, indica el estado observado y declara los datos del alimento. Si una foto falla, la publicación queda como borrador privado recuperable. La beneficiaria busca y filtra. Las donaciones vencen solas al terminar su plazo. |
 | 3 | Solicitudes y asignación | La beneficiaria indica quién recoge y cuánto tardará en llegar. El donante acepta o rechaza, y cada donación se asigna a una sola beneficiaria. |
 | 4 | Recojo, recepción e incidencias | Pasos: listo (donante), recogido (cualquiera de las dos partes) y recibido o recibido con problemas (beneficiaria). Antes del recojo se puede anular, y la donación vuelve a publicarse. |
 | 5 | Notificaciones | Avisos dentro del sistema con una campana que se actualiza cada 30 segundos. |
@@ -16,7 +16,7 @@
 | 8 | Administración y verificación | Expediente de verificación, edición de cuentas, donaciones y solicitudes, desactivación de cuentas, listas del sistema y resolución de incidencias. |
 
 **Servicios de apoyo:**
-- **Mapas:** son solo referenciales; no se calculan rutas.
+- **Mapas y planificación:** calculan rutas por carretera y un semáforo temporal con fechas declaradas y demora de tráfico manual; no hay GPS ni tráfico en vivo. El color no certifica la calidad.
 - **Auditoría:** el historial de cambios.
 - **Seguridad:** sesiones firmadas, CSRF y permisos por rol.
 - **Base de datos:** MySQL de XAMPP.
@@ -85,17 +85,18 @@ Cada cambio queda en la auditoría y se avisa a las personas afectadas.
 
 | Script | Cuándo |
 | --- | --- |
-| `db/realimenta_completa.sql` | Base nueva con datos de ejemplo (16 tablas). |
+| `db/realimenta_completa.sql` | Solo para base nueva: contiene `DROP TABLE`. Ejecutar luego `npm run db:migrate -- --apply`. |
 | `db/actualizar_modulos_definitivos.sql` | Base existente: estado "en revisión" y tabla `catalogos`. |
 | `db/actualizar_verificacion.sql` | Base existente, después del anterior: expediente de verificación (`codigo_registro`, `subsanacion_habilitada`, `verificaciones`, `verificacion_documentos`). |
 
-El servidor no modifica la estructura: si falta algo, no arranca e indica qué falta (`npm run db:check`).
+El servidor no modifica la estructura automáticamente. Con respaldo previo, `npm run db:migrate -- --apply` agrega las tablas y columnas ausentes sin borrar datos; `npm run db:check` verifica el resultado.
 
 ## 7. API nueva (resumen)
 
 | Ruta | Uso |
 | --- | --- |
 | `GET /api/notificaciones`, `GET /api/notificaciones/resumen`, `POST /api/notificaciones/:id/leida`, `POST /api/notificaciones/leidas` | Avisos de la cuenta. |
+| `POST /api/donaciones/:id/evaluacion-ruta`, `POST /api/seguimiento/:id/evaluacion-ruta` | Ruta por carretera y evaluación del traslado. |
 | `POST /api/seguimiento/:id/hitos` | Pasos `listo`, `recogido`, `confirmado`, `con_problemas` y `observacion`. |
 | `POST /api/seguimiento/:id/anular` | Anular el recojo antes de recoger (`motivo`). |
 | `GET /api/verificacion/codigo/:codigo` | Consulta de un comprobante. |
@@ -115,8 +116,8 @@ El servidor no modifica la estructura: si falta algo, no arranca e indica qué f
 
 ## 8. Pruebas
 
-- **`npm test`:** 63 pruebas de la API sobre una MariaDB temporal.
-- **`npm run test:ui`:** 10 recorridos en Chrome, también sobre una base temporal. Ninguna de las dos escribe en la base `realimenta`.
+- **`npm test`:** Pruebas de la API sobre una MariaDB temporal.
+- **`npm run test:ui`:** Recorridos en Chrome, también sobre una base temporal. Ninguna de las dos escribe en la base `realimenta`.
 
 ## 9. Pendientes
 

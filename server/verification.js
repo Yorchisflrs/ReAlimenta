@@ -241,7 +241,7 @@ verificationRouter.get('/verificacion/codigo/:codigo', requireAuth, async (req, 
   const user = req.user;
   if (parsed.type === 'D') {
     const row = (await db.query(`SELECT d.*, dt.nombre_establecimiento, dt.distrito, dt.id_usuario AS donante_usuario FROM donaciones d JOIN donantes dt ON dt.id_donante = d.id_donante WHERE d.id_donacion = ?`, [parsed.id])).rows[0];
-    if (!row || verificationCode('D', row.id_donacion, row.fecha_creacion) !== parsed.code) notFound();
+    if (!row || row.borrador || verificationCode('D', row.id_donacion, row.fecha_creacion) !== parsed.code) notFound();
     const involved = user.rol === 'administrador' || user.id_usuario === row.donante_usuario ||
       (user.rol === 'organizacion' && (await db.query('SELECT 1 FROM solicitudes WHERE id_donacion = ? AND id_organizacion = ?', [row.id_donacion, user.perfil?.id_organizacion || -1])).rowCount);
     if (!involved) notFound();

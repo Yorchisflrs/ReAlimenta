@@ -77,8 +77,23 @@ test('API y MySQL responden con fecha del servidor; prueba de conexión de desar
   const check = await call('GET', '/api/dev/conexion');
   assert.equal(check.status, 200);
   assert.equal(check.data.data.message, 'Conexión a MySQL establecida correctamente');
-  assert.equal(check.data.data.tablas_encontradas, 16);
+  assert.equal(check.data.data.tablas_encontradas, 17);
   assert.doesNotMatch(JSON.stringify(check.data), /password|contrase|root|MariaDB|10\.4/i);
+});
+
+test('Donación: conserva distrito y estado declarados y valida fechas de consumo y vencimiento', async () => {
+  const now=Date.now();
+  const value={distrito:'Juliaca',estado_alimento_declarado:'requiere_revision',fecha_vencimiento:new Date(now+8*3600000).toISOString()};
+  const created=await createDonation(value);
+  assert.equal(created.distrito,'Juliaca');
+  assert.equal(created.estado_alimento_declarado,'requiere_revision');
+  assert.ok(created.fecha_vencimiento);
+  const filtered=await call('GET','/api/donaciones?distrito=Juliaca',undefined,accounts.organizacion);
+  assert.ok(filtered.data.data.some(item=>item.id_donacion===created.id_donacion));
+  const early=await call('POST','/api/donaciones',donation({...value,fecha_vencimiento:new Date(now+3600000).toISOString()}),accounts.donante);
+  assert.equal(early.status,422);
+  const later=await call('POST','/api/donaciones',donation({...value,fecha_vencimiento:new Date(now+6*3600000).toISOString()}),accounts.donante);
+  assert.equal(later.status,422);
 });
 
 test('Custodia: aceptación crea asignación, entrega y seguimiento con permisos y secuencia sin saltos', async () => {
